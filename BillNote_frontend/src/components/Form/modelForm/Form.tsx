@@ -103,7 +103,11 @@ const ProviderForm = ({ isCreate = false }: { isCreate?: boolean }) => {
       if (isEditMode) {
 
         const data = await loadProviderById(id!)
-        providerForm.reset(data)
+        // 编辑模式下，不预填充API Key，避免使用masked的值
+        providerForm.reset({
+          ...data,
+          apiKey: '', // 清空API Key，要求用户重新输入
+        })
         setIsBuiltIn(data.type === 'built-in')
       } else {
         providerForm.reset({
@@ -247,9 +251,19 @@ const ProviderForm = ({ isCreate = false }: { isCreate?: boolean }) => {
               <FormItem className="flex items-center gap-4">
                 <FormLabel className="w-24 text-right">API Key</FormLabel>
                 <FormControl>
-                  <Input {...field} className="flex-1" />
+                  <Input 
+                    {...field} 
+                    className="flex-1" 
+                    placeholder={isEditMode ? "重新输入完整的API Key" : "输入API Key"}
+                    type="password"
+                  />
                 </FormControl>
                 <FormMessage />
+                {isEditMode && (
+                  <div className="text-xs text-gray-500">
+                    为安全起见，请重新输入完整的API Key
+                  </div>
+                )}
               </FormItem>
             )}
           />

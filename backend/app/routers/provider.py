@@ -54,7 +54,8 @@ def get_all_providers():
 @router.get("/get_provider_by_id/{id}")
 def get_provider_by_id(id: str):
     try:
-        res = ProviderService.get_provider_by_id_safe(id)
+        # 编辑provider时需要返回真实的API Key，而不是masked版本
+        res = ProviderService.get_provider_by_id(id)
         return R.success(data=res)
     except Exception as e:
         return R.error(msg=e)
@@ -71,16 +72,32 @@ def get_provider_by_id(id: str):
 @router.post("/update_provider")
 def update_provider(data: ProviderUpdateRequest):
     try:
+        from app.utils.logger import get_logger
+        logger = get_logger(__name__)
+        
+        logger.info(f"=== 路由接收到更新请求 ===")
+        logger.info(f"请求数据类型: {type(data)}")
+        logger.info(f"请求数据内容: {data}")
+        logger.info(f"data.id: {data.id}")
+        logger.info(f"data.api_key: '{data.api_key}' (长度: {len(data.api_key) if data.api_key else 0})")
+        logger.info(f"data.api_key是否为None: {data.api_key is None}")
+        logger.info(f"data.api_key是否为空字符串: {data.api_key == '' if data.api_key is not None else 'N/A'}")
+        
         if all(
             field is None
             for field in [data.name, data.api_key, data.base_url, data.logo, data.type,data.enabled]
         ):
+            logger.warning("所有字段都为None，返回错误")
             return R.error(msg='请至少填写一个参数')
 
-        provider_id =ProviderService.update_provider(
+        dict_data = dict(data)
+        logger.info(f"转换为字典的数据: {dict_data}")
+
+        provider_id = ProviderService.update_provider(
             id=data.id,
-            data=dict(data)
+            data=dict_data
         )
+        logger.info(f"更新结果: {provider_id}")
         return R.success(msg='更新模型供应商成功',data={'id': provider_id})
     except Exception as e:
         print(e)
