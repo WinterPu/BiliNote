@@ -7,7 +7,8 @@ class ProviderErrorEnum(enum.Enum):
     CREATE_FAILED = (200103, "供应商创建失败")
     NOT_FOUND = (200104, "供应商不存在/未保存")
     WRONG_PARAMETER = (200105, "API / API 地址不正确")
-    UNKNOW_ERROR = (200106, "未知错误")
+    INVALID_API_KEY = (200106, "API Key无效或权限不足")
+    UNKNOW_ERROR = (200107, "未知错误")
 
     def __init__(self, code, message):
         self.code = code

@@ -47,7 +47,9 @@ async def lifespan(app: FastAPI):
 app = create_app(lifespan=lifespan)
 origins = [
     "http://localhost",
+    "http://localhost:3015",
     "http://127.0.0.1",
+    "http://127.0.0.1:3015",
     "http://tauri.localhost",
 ]
 

@@ -27,16 +27,29 @@ class ModelService:
     def get_model_list(provider_id: int, verbose: bool = False):
         provider = ProviderService.get_provider_by_id(provider_id)
         if not provider:
+            logger.error(f"Provider {provider_id} not found")
             return []
 
         try:
             config = ModelService._build_model_config(provider)
+            logger.info(f"Testing API for provider {provider['name']} with base_url: {config.base_url}")
+            
             gpt = GPTFactory().from_config(config)
             models = gpt.list_models()
+            
+            logger.info(f"Models type: {type(models)}")
+            logger.info(f"Models has data attr: {hasattr(models, 'data')}")
+            
+            if hasattr(models, 'data'):
+                logger.info(f"Models data length: {len(models.data) if models.data else 0}")
+                if models.data:
+                    logger.info(f"First model: {models.data[0].id}")
+            
             if verbose:
                 print(f"[{provider['name']}] 模型列表: {models}")
             return models
         except Exception as e:
+            logger.error(f"[{provider['name']}] 获取模型失败: {e}")
             print(f"[{provider['name']}] 获取模型失败: {e}")
             return []
 
@@ -87,8 +100,41 @@ class ModelService:
             provider = ProviderService.get_provider_by_id(provider_id)
 
             models = ModelService.get_model_list(provider["id"], verbose=verbose)
-            print(type(models))
-            serializable_models = [m.dict() for m in models.data]
+            logger.info(f"Models type: {type(models)}")
+            
+            # 检查返回值类型和结构
+            serializable_models = []
+            
+            if hasattr(models, 'data') and models.data:
+                # OpenAI SDK v1.x 返回的 SyncPage[Model] 对象
+                for model in models.data:
+                    if hasattr(model, 'model_dump'):
+                        # Pydantic v2 方式
+                        serializable_models.append(model.model_dump())
+                    elif hasattr(model, 'dict'):
+                        # Pydantic v1 方式
+                        serializable_models.append(model.dict())
+                    else:
+                        # 直接转换为字典
+                        serializable_models.append({
+                            "id": getattr(model, 'id', ''),
+                            "object": getattr(model, 'object', 'model'),
+                            "created": getattr(model, 'created', 0),
+                            "owned_by": getattr(model, 'owned_by', '')
+                        })
+                        
+            elif isinstance(models, list):
+                # 直接返回的列表
+                for model in models:
+                    if hasattr(model, 'model_dump'):
+                        serializable_models.append(model.model_dump())
+                    elif hasattr(model, 'dict'):
+                        serializable_models.append(model.dict())
+                    else:
+                        serializable_models.append(model)
+            else:
+                logger.warning(f"Unexpected models type: {type(models)}")
+            
             model_list = {
                 "models": serializable_models
             }
@@ -101,22 +147,58 @@ class ModelService:
             return []
     @staticmethod
     def connect_test(id: str) -> bool:
-
         provider = ProviderService.get_provider_by_id(id)
 
-        if provider:
-            if not provider.get('api_key'):
-                raise ProviderError(code=ProviderErrorEnum.NOT_FOUND.code, message=ProviderErrorEnum.NOT_FOUND.message)
-            result =  OpenAICompatibleProvider.test_connection(
+        if not provider:
+            raise ProviderError(code=ProviderErrorEnum.NOT_FOUND.code, message=ProviderErrorEnum.NOT_FOUND.message)
+            
+        if not provider.get('api_key'):
+            raise ProviderError(code=ProviderErrorEnum.INVALID_API_KEY.code, message="API Key为空")
+            
+        # 详细记录API Key传输信息
+        api_key = provider.get('api_key')
+        logger.info(f"ModelService连接测试:")
+        logger.info(f"Provider ID: {id}")
+        logger.info(f"Provider名称: {provider.get('name')}")
+        logger.info(f"从数据库获取的API Key长度: {len(api_key) if api_key else 0}")
+        
+        # 安全的字符串切片，避免None或空字符串错误
+        if api_key and len(api_key) > 0:
+            safe_prefix = api_key[:20] if len(api_key) >= 20 else api_key
+            safe_suffix = api_key[-4:] if len(api_key) >= 4 else api_key
+            logger.info(f"从数据库获取的API Key前缀: {safe_prefix}...")
+            logger.info(f"从数据库获取的API Key后缀: ...{safe_suffix}")
+            logger.info(f"API Key原始内容(安全检查): {repr(api_key)}")  # 使用repr查看原始字符串
+        else:
+            logger.info(f"API Key为空或None")
+            
+        logger.info(f"Base URL: {provider.get('base_url')}")
+            
+        try:
+            result = OpenAICompatibleProvider.test_connection(
                 api_key=provider.get('api_key'),
                 base_url=provider.get('base_url')
             )
             if result:
                 return True
             else:
-                raise ProviderError(code=ProviderErrorEnum.WRONG_PARAMETER.code,message=ProviderErrorEnum.WRONG_PARAMETER.message)
-
-        raise ProviderError(code=ProviderErrorEnum.NOT_FOUND.code, message=ProviderErrorEnum.NOT_FOUND.message)
+                # 如果test_connection返回False但没有抛出异常，可能是其他问题
+                raise ProviderError(code=ProviderErrorEnum.CONNECTION_TEST_FAILED.code, 
+                                 message=ProviderErrorEnum.CONNECTION_TEST_FAILED.message)
+                                 
+        except Exception as e:
+            # 根据具体错误类型返回准确的错误信息
+            error_str = str(e).lower()
+            if "401" in error_str or "unauthorized" in error_str or "api key" in error_str:
+                raise ProviderError(code=ProviderErrorEnum.INVALID_API_KEY.code, 
+                                 message=ProviderErrorEnum.INVALID_API_KEY.message)
+            elif "404" in error_str or "not found" in error_str:
+                raise ProviderError(code=ProviderErrorEnum.WRONG_PARAMETER.code, 
+                                 message=ProviderErrorEnum.WRONG_PARAMETER.message)
+            else:
+                # 其他类型的错误
+                raise ProviderError(code=ProviderErrorEnum.CONNECTION_TEST_FAILED.code,
+                                 message=f"连接测试失败: {str(e)}")
 
 
 
