@@ -311,25 +311,46 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
                             },
 
                             // Enhanced image with zoom capability
-                            img: ({ node, ...props }) =>{
+                            img: ({ node, ...props }: any) => {
+                              // 处理图片路径
+                              let src = props.src
+                              const originalSrc = src
+                              
+                              // 如果是相对路径（以 /static/ 开头），直接使用（Vite已配置代理）
+                              // 如果是完整URL（以 http 开头），直接使用
+                              // 其他情况，添加baseURL前缀
+                              if (src?.startsWith('/static/')) {
+                                // 直接使用，Vite代理会处理
+                                console.log('Image path (static):', originalSrc, '→', src)
+                              } else if (src?.startsWith('http')) {
+                                // 完整URL，直接使用
+                                console.log('Image path (http):', originalSrc, '→', src)
+                              } else {
+                                // 其他情况，添加baseURL前缀
+                                src = baseURL + src
+                                console.log('Image path (baseURL):', originalSrc, '→', src)
+                              }
 
-                              let src = baseURL +props.src
-                              props.src = src
-
-
-                           return(
-
-
-                            <div className="my-8 flex justify-center">
-                                <Zoom>
-                                  <img
-                                    {...props}
-                                    className="max-w-full cursor-zoom-in rounded-lg object-cover shadow-md transition-all hover:shadow-lg"
-                                    style={{ maxHeight: '500px' }}
-                                  />
-                                </Zoom>
-                              </div>
-                            )},
+                              return (
+                                <div className="my-8 flex justify-center">
+                                  <Zoom>
+                                    <img
+                                      {...props}
+                                      src={src}
+                                      className="max-w-full cursor-zoom-in rounded-lg object-cover shadow-md transition-all hover:shadow-lg"
+                                      style={{ maxHeight: '500px' }}
+                                      onError={(e) => {
+                                        console.error('Image failed to load:', src)
+                                        console.error('Image error event:', e)
+                                      }}
+                                      onLoad={() => {
+                                        console.log('Image loaded successfully:', src)
+                                      }}
+                                    />
+                                  </Zoom>
+                                </div>
+                              )
+                            },
 
                             // Better strong/bold text
                             strong: ({ children, ...props }) => (
@@ -529,7 +550,7 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
                         ),
 
                         // Enhanced links with special handling for "原片" links
-                        a: ({ href, children, ...props }) => {
+                        a: ({ href, children, ...props }: any) => {
                           const isOriginLink =
                             typeof children[0] === 'string' &&
                             (children[0] as string).startsWith('原片 @')
@@ -572,25 +593,46 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
                         },
 
                         // Enhanced image with zoom capability
-                        img: ({ node, ...props }) =>{
+                        img: ({ node, ...props }: any) => {
+                          // 处理图片路径
+                          let src = props.src
+                          const originalSrc = src
+                          
+                          // 如果是相对路径（以 /static/ 开头），直接使用（Vite已配置代理）
+                          // 如果是完整URL（以 http 开头），直接使用
+                          // 其他情况，添加baseURL前缀
+                          if (src?.startsWith('/static/')) {
+                            // 直接使用，Vite代理会处理
+                            console.log('Image path (static):', originalSrc, '→', src)
+                          } else if (src?.startsWith('http')) {
+                            // 完整URL，直接使用
+                            console.log('Image path (http):', originalSrc, '→', src)
+                          } else {
+                            // 其他情况，添加baseURL前缀
+                            src = baseURL + src
+                            console.log('Image path (baseURL):', originalSrc, '→', src)
+                          }
 
-                          let src = baseURL +props.src
-                          props.src = src
-
-
-                       return(
-
-
-                        <div className="my-8 flex justify-center">
-                            <Zoom>
-                              <img
-                                {...props}
-                                className="max-w-full cursor-zoom-in rounded-lg object-cover shadow-md transition-all hover:shadow-lg"
-                                style={{ maxHeight: '500px' }}
-                              />
-                            </Zoom>
-                          </div>
-                        )},
+                          return (
+                            <div className="my-8 flex justify-center">
+                              <Zoom>
+                                <img
+                                  {...props}
+                                  src={src}
+                                  className="max-w-full cursor-zoom-in rounded-lg object-cover shadow-md transition-all hover:shadow-lg"
+                                  style={{ maxHeight: '500px' }}
+                                  onError={(e) => {
+                                    console.error('Image failed to load:', src)
+                                    console.error('Image error event:', e)
+                                  }}
+                                  onLoad={() => {
+                                    console.log('Image loaded successfully:', src)
+                                  }}
+                                />
+                              </Zoom>
+                            </div>
+                          )
+                        },
 
                         // Better strong/bold text
                         strong: ({ children, ...props }) => (
