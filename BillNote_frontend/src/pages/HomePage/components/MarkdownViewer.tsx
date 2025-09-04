@@ -23,6 +23,7 @@ import { noteStyles } from '@/constant/note.ts'
 import { MarkdownHeader } from '@/pages/HomePage/components/MarkdownHeader.tsx'
 import TranscriptViewer from '@/pages/HomePage/components/transcriptViewer.tsx'
 import MarkmapEditor from '@/pages/HomePage/components/MarkmapComponent.tsx'
+import { processMarkdownScreenshots } from '@/utils/screenshotUtils'
 import { ResizablePanel, ResizablePanelGroup, ResizableHandle } from '@/components/ui/resizable'
 
 interface VersionNote {
@@ -134,19 +135,8 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
     const task = getCurrentTask()
     const name = task?.audioMeta.title || 'note'
     
-    // 处理截图路径，将相对路径转换为绝对路径
-    let processedContent = selectedContent
-    const screenshotBaseURL = import.meta.env.VITE_SCREENSHOT_BASE_URL || 'http://localhost:8483/static/screenshots'
-    
-    // 替换所有截图链接为绝对路径
-    processedContent = processedContent.replace(
-      /!\[([^\]]*)\]\((\/static\/screenshots\/[^)]+)\)/g,
-      (_, alt, src) => {
-        const filename = src.replace(/^\/static\/screenshots\//, '')
-        const absoluteUrl = `${screenshotBaseURL}/${filename}`
-        return `![${alt}](${absoluteUrl})`
-      }
-    )
+    // 使用公共函数处理截图路径
+    const processedContent = processMarkdownScreenshots(selectedContent)
     
     const blob = new Blob([processedContent], { type: 'text/markdown;charset=utf-8' })
     const link = document.createElement('a')
@@ -222,23 +212,7 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
         <div className="flex w-full flex-1 overflow-hidden bg-white">
           <div className={'w-full'}>
             <MarkmapEditor
-              value={(() => {
-                // 为思维导图处理截图路径，将相对路径转换为绝对路径
-                let processedContent = selectedContent
-                const screenshotBaseURL = import.meta.env.VITE_SCREENSHOT_BASE_URL || 'http://localhost:8483/static/screenshots'
-                
-                // 替换所有截图链接为绝对路径
-                processedContent = processedContent.replace(
-                  /!\[([^\]]*)\]\((\/static\/screenshots\/[^)]+)\)/g,
-                  (_, alt, src) => {
-                    const filename = src.replace(/^\/static\/screenshots\//, '')
-                    const absoluteUrl = `${screenshotBaseURL}/${filename}`
-                    return `![${alt}](${absoluteUrl})`
-                  }
-                )
-                
-                return processedContent
-              })()}
+              value={processMarkdownScreenshots(selectedContent)}
               onChange={() => {}}
               height="100%" // 根据需求可以设定百分比或固定高度
             />

@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
+import { convertToAbsoluteScreenshotPath } from "@/utils/screenshotUtils"
 
 interface Segment {
   start: number
@@ -178,16 +179,8 @@ const TranscriptViewer = () => {
           // 为 markdown 格式添加截图，使用绝对路径
           const screenshot = getScreenshotForTime(segment.start)
           if (screenshot) {
-            // 直接使用 VITE_SCREENSHOT_BASE_URL 作为基础 URL
-            let absoluteScreenshotPath
-            if (screenshot.startsWith('http')) {
-              absoluteScreenshotPath = screenshot
-            } else {
-              // 直接使用环境变量中的截图基础 URL
-              const screenshotBaseURL = import.meta.env.VITE_SCREENSHOT_BASE_URL || 'http://localhost:8483/static/screenshots'
-              const filename = screenshot.replace(/^\/static\/screenshots\//, '')
-              absoluteScreenshotPath = `${screenshotBaseURL}/${filename}`
-            }
+            // 使用公共函数转换为绝对路径
+            const absoluteScreenshotPath = convertToAbsoluteScreenshotPath(screenshot)
             content += `\n\n![截图 ${formatTime(segment.start)}](${absoluteScreenshotPath})`
             content += `\n\n*截图时间: ${formatTime(segment.start)}*`
           }
