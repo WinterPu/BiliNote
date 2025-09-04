@@ -196,6 +196,7 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
         onCopy={handleCopy}
         onDownload={handleDownload}
         createAt={createTime}
+        duration={currentTask?.duration}  // 添加生成耗时
         showTranscribe={showTranscribe}
         setShowTranscribe={setShowTranscribe}
         viewMode={viewMode}

@@ -27,7 +27,11 @@ interface NoteHeaderProps {
   onCopy: () => void
   onDownload: () => void
   createAt?: string | Date
+  duration?: number  // 添加生成耗时参数
+  showTranscribe?: boolean
   setShowTranscribe: (show: boolean) => void
+  viewMode?: string
+  setViewMode?: (mode: 'map' | 'preview') => void
 }
 
 export function MarkdownHeader({
@@ -41,6 +45,7 @@ export function MarkdownHeader({
   onCopy,
   onDownload,
   createAt,
+  duration,
   showTranscribe,
   setShowTranscribe,
   viewMode,
@@ -63,10 +68,6 @@ export function MarkdownHeader({
 
   const styleName = noteStyles.find(v => v.value === style)?.label || style
 
-  const reversedMarkdown: VersionNote[] = Array.isArray(currentTask?.markdown)
-    ? [...currentTask!.markdown].reverse()
-    : []
-
   const formatDate = (date: string | Date | undefined) => {
     if (!date) return ''
     const d = typeof date === 'string' ? new Date(date) : date
@@ -82,6 +83,19 @@ export function MarkdownHeader({
       .replace(/\//g, '-')
   }
 
+  const formatDuration = (seconds: number | undefined) => {
+    if (!seconds || seconds < 0) return ''
+    if (seconds < 1) {
+      return `${Math.round(seconds * 1000)}ms`
+    }
+    if (seconds < 60) {
+      return `${seconds.toFixed(1)}秒`
+    }
+    const minutes = Math.floor(seconds / 60)
+    const remainingSeconds = Math.floor(seconds % 60)
+    return `${minutes}分${remainingSeconds}秒`
+  }
+
   return (
     <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-3 border-b bg-white/95 px-4 py-2 backdrop-blur-sm">
       {/* 左侧区域：版本 + 标签 + 创建时间 */}
@@ -91,14 +105,17 @@ export function MarkdownHeader({
             <SelectTrigger className="h-8 w-[160px] text-sm">
               <div className="flex items-center">
                 {(() => {
-                  const idx = currentTask?.markdown.findIndex(v => v.ver_id === currentVerId)
-                  return idx !== -1 ? `版本（${currentVerId.slice(-6)}）` : ''
+                  if (Array.isArray(currentTask?.markdown)) {
+                    const idx = currentTask.markdown.findIndex(v => v.ver_id === currentVerId)
+                    return idx !== -1 ? `版本（${currentVerId.slice(-6)}）` : ''
+                  }
+                  return ''
                 })()}
               </div>
             </SelectTrigger>
 
             <SelectContent>
-              {(currentTask?.markdown || []).map((v, idx) => {
+              {Array.isArray(currentTask?.markdown) && currentTask.markdown.map((v) => {
                 const shortId = v.ver_id.slice(-6)
                 return (
                   <SelectItem key={v.ver_id} value={v.ver_id}>
@@ -120,6 +137,10 @@ export function MarkdownHeader({
         {createAt && (
           <div className="text-muted-foreground text-sm">创建时间: {formatDate(createAt)}</div>
         )}
+
+        {duration && (
+          <div className="text-muted-foreground text-sm">生成耗时: {formatDuration(duration)}</div>
+        )}
       </div>
 
       {/* 右侧操作按钮 */}
@@ -129,7 +150,7 @@ export function MarkdownHeader({
             <TooltipTrigger asChild>
               <Button
                 onClick={() => {
-                  setViewMode(viewMode == 'preview' ? 'map' : 'preview')
+                  setViewMode?.(viewMode == 'preview' ? 'map' : 'preview')
                 }}
                 variant="ghost"
                 size="sm"

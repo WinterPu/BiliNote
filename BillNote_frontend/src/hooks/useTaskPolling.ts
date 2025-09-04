@@ -25,18 +25,19 @@ export const useTaskPolling = (interval = 3000) => {
       for (const task of pendingTasks) {
         try {
           console.log('🔄 正在轮询任务：', task.id)
-          const res = await get_task_status(task.id)
-          const { status } = res
+          const data = await get_task_status(task.id)
+          const { status, result } = data
 
           if (status && status !== task.status) {
             if (status === 'SUCCESS') {
-              const { markdown, transcript, audio_meta } = res.result
+              const { markdown, transcript, audio_meta, duration } = result || {}
               toast.success('笔记生成成功')
               updateTaskContent(task.id, {
                 status,
                 markdown,
                 transcript,
                 audioMeta: audio_meta,
+                duration,  // 添加duration字段
               })
             } else if (status === 'FAILED') {
               updateTaskContent(task.id, { status })

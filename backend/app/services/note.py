@@ -118,6 +118,9 @@ class NoteGenerator:
         if grid_size is None:
             grid_size = []
 
+        import time
+        start_time = time.time()  # 记录开始时间
+
         try:
             logger.info(f"开始生成笔记 (task_id={task_id})")
             self._update_status(task_id, TaskStatus.PARSING)
@@ -183,9 +186,11 @@ class NoteGenerator:
             self._save_metadata(video_id=audio_meta.video_id, platform=platform, task_id=task_id)
 
             # 6. 完成
+            end_time = time.time()  # 记录结束时间
+            duration = end_time - start_time  # 计算耗时
             self._update_status(task_id, TaskStatus.SUCCESS)
-            logger.info(f"笔记生成成功 (task_id={task_id})")
-            return NoteResult(markdown=markdown, transcript=transcript, audio_meta=audio_meta)
+            logger.info(f"笔记生成成功 (task_id={task_id}), 耗时: {duration:.2f}秒")
+            return NoteResult(markdown=markdown, transcript=transcript, audio_meta=audio_meta, duration=duration)
 
         except Exception as exc:
             logger.error(f"生成笔记流程异常 (task_id={task_id})：{exc}", exc_info=True)
