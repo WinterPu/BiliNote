@@ -133,7 +133,22 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
   const handleDownload = () => {
     const task = getCurrentTask()
     const name = task?.audioMeta.title || 'note'
-    const blob = new Blob([selectedContent], { type: 'text/markdown;charset=utf-8' })
+    
+    // 处理截图路径，将相对路径转换为绝对路径
+    let processedContent = selectedContent
+    const screenshotBaseURL = import.meta.env.VITE_SCREENSHOT_BASE_URL || 'http://localhost:8483/static/screenshots'
+    
+    // 替换所有截图链接为绝对路径
+    processedContent = processedContent.replace(
+      /!\[([^\]]*)\]\((\/static\/screenshots\/[^)]+)\)/g,
+      (_, alt, src) => {
+        const filename = src.replace(/^\/static\/screenshots\//, '')
+        const absoluteUrl = `${screenshotBaseURL}/${filename}`
+        return `![${alt}](${absoluteUrl})`
+      }
+    )
+    
+    const blob = new Blob([processedContent], { type: 'text/markdown;charset=utf-8' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
     link.download = `${name}.md`
@@ -207,7 +222,23 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
         <div className="flex w-full flex-1 overflow-hidden bg-white">
           <div className={'w-full'}>
             <MarkmapEditor
-              value={selectedContent}
+              value={(() => {
+                // 为思维导图处理截图路径，将相对路径转换为绝对路径
+                let processedContent = selectedContent
+                const screenshotBaseURL = import.meta.env.VITE_SCREENSHOT_BASE_URL || 'http://localhost:8483/static/screenshots'
+                
+                // 替换所有截图链接为绝对路径
+                processedContent = processedContent.replace(
+                  /!\[([^\]]*)\]\((\/static\/screenshots\/[^)]+)\)/g,
+                  (_, alt, src) => {
+                    const filename = src.replace(/^\/static\/screenshots\//, '')
+                    const absoluteUrl = `${screenshotBaseURL}/${filename}`
+                    return `![${alt}](${absoluteUrl})`
+                  }
+                )
+                
+                return processedContent
+              })()}
               onChange={() => {}}
               height="100%" // 根据需求可以设定百分比或固定高度
             />
