@@ -1,0 +1,5 @@
+[book]
+authors = ["WinterPu"]
+language = "en"
+src = "src"
+title = "BiliNote Dev Notes"
