@@ -5,6 +5,7 @@ import {
   HardDriveDownload,
   Wrench,
   Info,
+  Trash2,
 } from 'lucide-react'
 import MenuBar, { IMenuProps } from '@/pages/SettingPage/components/menuBar.tsx'
 
@@ -29,6 +30,12 @@ const Menu = () => {
       name: '下载配置',
       icon: <HardDriveDownload />,
       path: '/settings/download',
+    },
+    {
+      id: 'cache',
+      name: '清理缓存',
+      icon: <Trash2 />,
+      path: '/settings/cache',
     },
     // //其他配置
     // {

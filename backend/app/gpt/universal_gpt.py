@@ -39,10 +39,21 @@ class UniversalGPT(GPT):
             extras=kwargs.get('extras'),
         )
 
+        # ⛳ 检查模型是否支持视觉功能
+        video_img_urls = kwargs.get('video_img_urls', [])
+        supports_vision = self._model_supports_vision()
+        
+        # 如果模型不支持视觉但有图片URL，则记录警告并跳过图片
+        if video_img_urls and not supports_vision:
+            from app.utils.logger import get_logger
+            logger = get_logger(__name__)
+            logger.warning(f"模型 {self.model} 不支持视觉功能，跳过 {len(video_img_urls)} 张图片")
+            video_img_urls = []  # 清空图片URL列表
+
         # ⛳ 组装 content 数组，支持 text + image_url 混合
         content = [{"type": "text", "text": content_text}]
-        video_img_urls = kwargs.get('video_img_urls', [])
 
+        # 只有在模型支持视觉且有图片时才添加图片
         for url in video_img_urls:
             content.append({
                 "type": "image_url",
@@ -59,6 +70,36 @@ class UniversalGPT(GPT):
         }]
 
         return messages
+    
+    def _model_supports_vision(self) -> bool:
+        """检查模型是否支持视觉功能"""
+        if not self.model:
+            return False
+        
+        model_name_lower = self.model.lower()
+        
+        # 支持视觉的模型模式列表
+        vision_patterns = [
+            'gpt-4o',           # GPT-4O 系列
+            'gpt-4-vision',     # GPT-4 Vision
+            'gpt-4-turbo',      # GPT-4 Turbo (通常支持视觉)
+            'claude-3',         # Claude 3 系列
+            'gemini',           # Gemini 系列通常支持视觉
+            'qwen-vl',          # Qwen Vision Language
+            'llava',            # LLaVA 系列
+            'vision',           # 包含vision关键词的模型
+            'multimodal',       # 多模态模型
+            'vlm',              # Vision Language Model
+            'qwen2-vl',         # Qwen2 VL系列
+            'glm-4v',           # GLM-4V 视觉模型
+        ]
+        
+        # 检查模型名是否包含视觉相关关键词
+        for pattern in vision_patterns:
+            if pattern in model_name_lower:
+                return True
+                
+        return False
 
     def list_models(self):
         return self.client.models.list()

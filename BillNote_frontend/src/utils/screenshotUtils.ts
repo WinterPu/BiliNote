@@ -3,6 +3,14 @@
  */
 
 /**
+ * 获取 API 基础 URL
+ * @returns API 基础 URL
+ */
+export const getApiBaseUrl = (): string => {
+  return import.meta.env.VITE_API_BASE_URL || 'http://localhost:8483/api'
+}
+
+/**
  * 获取截图基础 URL
  * @returns 截图基础 URL
  */

@@ -7,14 +7,11 @@ import { Route } from 'react-router-dom'
 import Index from '@/pages/Index.tsx'
 import NotFoundPage from '@/pages/NotFoundPage'
 import Model from '@/pages/SettingPage/Model.tsx'
-import Transcriber from '@/pages/SettingPage/transcriber.tsx'
 import ProviderForm from '@/components/Form/modelForm/Form.tsx'
-import StepBar from '@/pages/HomePage/components/StepBar.tsx'
-import Downloading from '@/components/Lottie/download.tsx'
-import Prompt from '@/pages/SettingPage/Prompt.tsx'
 import AboutPage from '@/pages/SettingPage/about.tsx'
 import Downloader from '@/pages/SettingPage/Downloader.tsx'
 import DownloaderForm from '@/components/Form/DownloaderForm/Form.tsx'
+import Cache from '@/pages/SettingPage/cache.tsx'
 import { useEffect } from 'react'
 import { systemCheck } from '@/services/system.ts'
 import { useCheckBackend } from '@/hooks/useCheckBackend.ts'
@@ -56,6 +53,7 @@ function App() {
               <Route path="download" element={<Downloader />}>
                 <Route path=":id" element={<DownloaderForm />} />
               </Route>
+              <Route path="cache" element={<Cache />}></Route>
               <Route path="about" element={<AboutPage />}></Route>
               <Route path="*" element={<NotFoundPage />} />
             </Route>
