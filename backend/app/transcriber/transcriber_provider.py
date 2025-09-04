@@ -13,6 +13,7 @@ logger = get_logger(__name__)
 class TranscriberType(str, Enum):
     FAST_WHISPER = "fast-whisper"
     MLX_WHISPER = "mlx-whisper"
+    OPENAI_WHISPER = "openai-whisper"
     BCUT = "bcut"
     KUAISHOU = "kuaishou"
     GROQ = "groq"
@@ -33,10 +34,20 @@ logger.info('初始化转录服务提供器')
 _transcribers = {
     TranscriberType.FAST_WHISPER: None,
     TranscriberType.MLX_WHISPER: None,
+    TranscriberType.OPENAI_WHISPER: None,
     TranscriberType.BCUT: None,
     TranscriberType.KUAISHOU: None,
     TranscriberType.GROQ: None,
 }
+# OpenAI Whisper Transcriber
+try:
+    from app.transcriber.openai_whisper import OpenAIWhisperTranscriber
+    OPENAI_WHISPER_AVAILABLE = True
+    logger.info("OpenAI Whisper 可用，已导入")
+except ImportError:
+    OPENAI_WHISPER_AVAILABLE = False
+    logger.warning("OpenAI Whisper 导入失败，可能未安装 openai-whisper")
+
 
 # 公共实例初始化函数
 def _init_transcriber(key: TranscriberType, cls, *args, **kwargs):
@@ -50,6 +61,7 @@ def _init_transcriber(key: TranscriberType, cls, *args, **kwargs):
             raise
     return _transcribers[key]
 
+# 各类型获取方法
 # 各类型获取方法
 def get_groq_transcriber():
     return _init_transcriber(TranscriberType.GROQ, GroqTranscriber)
@@ -68,6 +80,12 @@ def get_mlx_whisper_transcriber(model_size="base"):
         logger.warning("MLX Whisper 不可用，请确保在 Apple 平台且已安装 mlx_whisper")
         raise ImportError("MLX Whisper 不可用")
     return _init_transcriber(TranscriberType.MLX_WHISPER, MLXWhisperTranscriber, model_size=model_size)
+
+def get_openai_whisper_transcriber(model_size="base", device="cuda"):
+    if not OPENAI_WHISPER_AVAILABLE:
+        logger.warning("OpenAI Whisper 不可用，请确保已安装 openai-whisper")
+        raise ImportError("OpenAI Whisper 不可用")
+    return _init_transcriber(TranscriberType.OPENAI_WHISPER, OpenAIWhisperTranscriber, model_size=model_size, device=device)
 
 # 通用入口
 def get_transcriber(transcriber_type="fast-whisper", model_size="base", device="cuda"):
@@ -100,6 +118,12 @@ def get_transcriber(transcriber_type="fast-whisper", model_size="base", device="
             logger.warning("MLX Whisper 不可用，回退到 fast-whisper")
             return get_whisper_transcriber(whisper_model_size, device=device)
         return get_mlx_whisper_transcriber(whisper_model_size)
+
+    elif transcriber_enum == TranscriberType.OPENAI_WHISPER:
+        if not OPENAI_WHISPER_AVAILABLE:
+            logger.warning("OpenAI Whisper 不可用，回退到 fast-whisper")
+            return get_whisper_transcriber(whisper_model_size, device=device)
+        return get_openai_whisper_transcriber(whisper_model_size, device=device)
 
     elif transcriber_enum == TranscriberType.BCUT:
         return get_bcut_transcriber()
