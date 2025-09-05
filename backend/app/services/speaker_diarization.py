@@ -64,9 +64,9 @@ class WhisperDiarizationService(BaseSpeakerDiarization):
         try:
             # 模拟说话人分离结果
             # 假设音频有两个说话人，在不同时间段说话
-            result.add_segment(0.0, 30.0, "SPEAKER_00")
-            result.add_segment(30.0, 60.0, "SPEAKER_01") 
-            result.add_segment(60.0, 90.0, "SPEAKER_00")
+            result.add_segment(0.0, 30.0, "speaker0")
+            result.add_segment(30.0, 60.0, "speaker1") 
+            result.add_segment(60.0, 90.0, "speaker0")
             
             logger.info(f"模拟说话人分离完成，生成了 {len(result.segments)} 个片段")
             return result
@@ -112,7 +112,12 @@ class PyAnnoteSpeakerDiarization(BaseSpeakerDiarization):
             
             # 转换结果格式
             for turn, _, speaker in diarization.itertracks(yield_label=True):
-                result.add_segment(turn.start, turn.end, f"speaker{speaker}")
+                # 检查speaker是否已经包含前缀，避免重复拼接
+                if str(speaker).lower().startswith('speaker'):
+                    speaker_label = str(speaker).lower()
+                else:
+                    speaker_label = f"speaker{speaker}" if isinstance(speaker, int) else f"speaker{speaker}"
+                result.add_segment(turn.start, turn.end, speaker_label)
                 
             logger.info(f"PyAnnote 说话人分离完成，找到 {len(result.segments)} 个片段")
             return result
@@ -129,10 +134,13 @@ class MockSpeakerDiarization(BaseSpeakerDiarization):
         result = SpeakerDiarizationResult()
         
         # 简单模拟：假设每30秒切换一次说话人
-        import librosa
         try:
+            import librosa
             duration = librosa.get_duration(filename=audio_file)
-        except:
+        except ImportError:
+            logger.warning("librosa 未安装，使用默认时长")
+            duration = 300.0  # 默认5分钟
+        except Exception:
             duration = 300.0  # 默认5分钟
             
         current_speaker = "speaker0"
