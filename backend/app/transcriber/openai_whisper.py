@@ -1,3 +1,4 @@
+import os
 import whisper
 ## python -c "import whisper; print(whisper.available_models())"
 # 可用的 Whisper 模型选项如下：
@@ -44,6 +45,26 @@ class OpenAIWhisperTranscriber(Transcriber):
         :return: TranscriptResult
         """
         logger.info(f"OpenAI Whisper 开始处理文件: {file_path}")
+        
+        # 验证文件是否存在
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"音频文件不存在: {file_path}")
+        
+        # 验证文件大小
+        file_size = os.path.getsize(file_path)
+        if file_size == 0:
+            logger.warning(f"音频文件为空: {file_path}")
+            # 返回空的转录结果
+            return TranscriptResult(
+                language="unknown",
+                full_text="",
+                segments=[]
+            )
+        
+        # 验证文件大小是否过小（小于1KB可能是无效音频）
+        if file_size < 1024:
+            logger.warning(f"音频文件过小可能无效 ({file_size} bytes): {file_path}")
+        
         try:
             result = self.model.transcribe(file_path)
             logger.info("OpenAI Whisper 识别完成，处理结果...")

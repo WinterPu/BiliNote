@@ -63,6 +63,68 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
   const [showTranscribe, setShowTranscribe] = useState(false)
   const [viewMode, setViewMode] = useState<'map' | 'preview'>('preview')
   const svgRef = useRef<SVGSVGElement>(null)
+
+  // Helper function to render hashtags with special styling for recommend style
+  const renderParagraphWithTags = (children: React.ReactNode, props: any) => {
+    if (style !== 'recommend') {
+      return (
+        <p className="leading-7 [&:not(:first-child)]:mt-6" {...props}>
+          {children}
+        </p>
+      )
+    }
+
+    // Convert children to string to check for hashtags
+    const textContent = Array.isArray(children) ? children.join('') : String(children)
+    
+    // Check if this paragraph contains hashtags
+    const hashtagRegex = /#[\u4e00-\u9fa5a-zA-Z0-9_\-]+/g
+    const hasHashtags = hashtagRegex.test(textContent)
+
+    if (!hasHashtags) {
+      return (
+        <p className="leading-7 [&:not(:first-child)]:mt-6" {...props}>
+          {children}
+        </p>
+      )
+    }
+
+    // Split the text and render hashtags with special styling
+    const parts: (string | React.ReactElement)[] = []
+    let lastIndex = 0
+    let match
+
+    hashtagRegex.lastIndex = 0 // Reset regex
+    while ((match = hashtagRegex.exec(textContent)) !== null) {
+      // Add text before hashtag
+      if (match.index > lastIndex) {
+        parts.push(textContent.slice(lastIndex, match.index))
+      }
+      
+      // Add styled hashtag
+      parts.push(
+        <span
+          key={match.index}
+          className="inline-flex items-center px-2.5 py-0.5 mx-1 text-sm font-medium bg-blue-100 text-blue-800 rounded-full border border-blue-200 hover:bg-blue-200 transition-colors"
+        >
+          {match[0]}
+        </span>
+      )
+      
+      lastIndex = match.index + match[0].length
+    }
+
+    // Add remaining text
+    if (lastIndex < textContent.length) {
+      parts.push(textContent.slice(lastIndex))
+    }
+
+    return (
+      <p className="leading-7 [&:not(:first-child)]:mt-6" {...props}>
+        {parts}
+      </p>
+    )
+  }
   // 多版本内容处理
   useEffect(() => {
     if (!currentTask) return
@@ -265,12 +327,8 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
                               </h4>
                             ),
 
-                            // Paragraphs with better line height
-                            p: ({ children, ...props }) => (
-                              <p className="leading-7 [&:not(:first-child)]:mt-6" {...props}>
-                                {children}
-                              </p>
-                            ),
+                            // Paragraphs with better line height and hashtag styling for recommend style
+                            p: ({ children, ...props }) => renderParagraphWithTags(children, props),
 
                             // Enhanced links with special handling for "原片" links
                             a: ({ href, children, ...props }) => {
@@ -548,11 +606,7 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
                         ),
 
                         // Paragraphs with better line height
-                        p: ({ children, ...props }) => (
-                          <p className="leading-7 [&:not(:first-child)]:mt-6" {...props}>
-                            {children}
-                          </p>
-                        ),
+                        p: ({ children, ...props }) => renderParagraphWithTags(children, props),
 
                         // Enhanced links with special handling for "原片" links
                         a: ({ href, children, ...props }: any) => {

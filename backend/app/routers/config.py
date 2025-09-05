@@ -4,6 +4,7 @@ from typing import Optional
 from app.utils.response import ResponseWrapper as R
 
 from app.services.cookie_manager import CookieConfigManager
+from app.gpt.prompt_builder import note_styles, note_formats
 from ffmpeg_helper import ensure_ffmpeg_or_raise
 
 router = APIRouter()
@@ -43,3 +44,11 @@ async def sys_health():
 @router.get("/sys_check")
 async def sys_check():
     return R.success()
+
+@router.get("/note_config")
+async def get_note_config():
+    """获取笔记配置信息，包括可用的格式和风格"""
+    return R.success({
+        "formats": note_formats,
+        "styles": note_styles
+    })

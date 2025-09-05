@@ -385,7 +385,18 @@ class NoteGenerator:
             logger.info(f"检测到音频缓存 ({audio_cache_file})，直接读取")
             try:
                 data = json.loads(audio_cache_file.read_text(encoding="utf-8"))
-                return AudioDownloadResult(**data)
+                audio_result = AudioDownloadResult(**data)
+                
+                # 验证缓存的音频文件是否仍然存在且有效
+                if audio_result.file_path and os.path.exists(audio_result.file_path):
+                    file_size = os.path.getsize(audio_result.file_path)
+                    if file_size > 0:
+                        logger.info(f"音频缓存有效，文件大小: {file_size} bytes")
+                        return audio_result
+                    else:
+                        logger.warning(f"缓存的音频文件为空，将重新下载: {audio_result.file_path}")
+                else:
+                    logger.warning(f"缓存的音频文件不存在，将重新下载: {audio_result.file_path}")
             except Exception as e:
                 logger.warning(f"读取音频缓存失败，将重新下载：{e}")
         # 下载音频
@@ -397,6 +408,23 @@ class NoteGenerator:
                 output_dir=output_path,
                 need_video=need_video,
             )
+            
+            # 验证下载的音频文件
+            if not audio or not audio.file_path:
+                raise Exception("音频下载失败：未返回有效的音频文件路径")
+            
+            if not os.path.exists(audio.file_path):
+                raise Exception(f"音频下载失败：文件不存在 {audio.file_path}")
+            
+            file_size = os.path.getsize(audio.file_path)
+            if file_size == 0:
+                raise Exception(f"音频下载失败：文件为空 {audio.file_path}")
+            
+            if file_size < 1024:  # 小于1KB可能是无效音频
+                logger.warning(f"音频文件过小，可能无效 ({file_size} bytes): {audio.file_path}")
+            
+            logger.info(f"音频下载成功，文件大小: {file_size} bytes")
+            
             # 缓存 audio 元信息到本地 JSON
             audio_cache_file.write_text(json.dumps(asdict(audio), ensure_ascii=False, indent=2), encoding="utf-8")
             logger.info(f"音频下载并缓存成功 ({audio_cache_file})")
@@ -438,12 +466,49 @@ class NoteGenerator:
         # 调用转写器
         try:
             logger.info("开始转写音频")
+            
+            # 在转写前再次验证音频文件
+            if not os.path.exists(audio_file):
+                logger.error(f"音频文件不存在: {audio_file}")
+                raise Exception(f"音频文件不存在: {audio_file}")
+            
+            file_size = os.path.getsize(audio_file)
+            if file_size == 0:
+                logger.warning(f"音频文件为空，返回空转写结果: {audio_file}")
+                empty_transcript = TranscriptResult(
+                    language="unknown",
+                    full_text="",
+                    segments=[]
+                )
+                # 缓存空结果，避免重复尝试
+                transcript_cache_file.write_text(json.dumps(asdict(empty_transcript), ensure_ascii=False, indent=2), encoding="utf-8")
+                return empty_transcript
+            
             transcript = self.transcriber.transcript(file_path=audio_file)
             transcript_cache_file.write_text(json.dumps(asdict(transcript), ensure_ascii=False, indent=2), encoding="utf-8")
             logger.info(f"转写并缓存成功 ({transcript_cache_file})")
             return transcript
         except Exception as exc:
             logger.error(f"音频转写失败：{exc}")
+            
+            # 如果是由于音频文件问题导致的Whisper错误，尝试返回空结果而不是失败
+            error_msg = str(exc)
+            if any(keyword in error_msg.lower() for keyword in [
+                "cannot reshape tensor of 0 elements", 
+                "tensor of 0 elements", 
+                "empty", 
+                "no audio data",
+                "invalid audio"
+            ]):
+                logger.warning("检测到音频数据问题，返回空转写结果")
+                empty_transcript = TranscriptResult(
+                    language="unknown", 
+                    full_text="", 
+                    segments=[]
+                )
+                transcript_cache_file.write_text(json.dumps(asdict(empty_transcript), ensure_ascii=False, indent=2), encoding="utf-8")
+                return empty_transcript
+            
             self._handle_exception(task_id, exc)
             raise
 
@@ -476,6 +541,25 @@ class NoteGenerator:
         """
         task_id = markdown_cache_file.stem
         self._update_status(task_id, TaskStatus.SUMMARIZING)
+
+        # 检查转写结果是否为空
+        if not transcript.segments and not transcript.full_text:
+            logger.warning("转写结果为空，生成默认笔记")
+            default_markdown = f"""# {audio_meta.title or "无标题"}
+
+**注意**: 未能提取到音频内容，可能原因：
+- 音频文件损坏或无效
+- 音频内容为空或静音
+- 音频格式不支持
+
+**媒体信息**:
+- 平台: {audio_meta.platform}
+- 时长: {audio_meta.duration}秒
+- 文件: {audio_meta.file_path}
+"""
+            markdown_cache_file.write_text(default_markdown, encoding="utf-8")
+            logger.info(f"生成默认笔记并缓存成功 ({markdown_cache_file})")
+            return default_markdown
 
         source = GPTSource(
             title=audio_meta.title,
