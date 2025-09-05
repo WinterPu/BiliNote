@@ -65,10 +65,11 @@ class NoteGenerator:
     以及将任务信息写入状态文件与数据库等功能。
     """
 
-    def __init__(self):
+    def __init__(self, enable_speaker_diarization=None):
         self.model_size: str = "base"
         self.device: Optional[str] = None
         self.transcriber_type: str = os.getenv("TRANSCRIBER_TYPE", "fast-whisper")
+        self.enable_speaker_diarization = enable_speaker_diarization
         self.transcriber: Transcriber = self._init_transcriber()
         self.video_path: Optional[Path] = None
         self.video_img_urls=[]
@@ -220,7 +221,8 @@ class NoteGenerator:
             raise Exception(f"不支持的转写器：{self.transcriber_type}")
 
         logger.info(f"使用转写器：{self.transcriber_type}")
-        return get_transcriber(transcriber_type=self.transcriber_type)
+        return get_transcriber(transcriber_type=self.transcriber_type, 
+                             enable_speaker_diarization=self.enable_speaker_diarization)
 
     def _get_gpt(self, model_name: Optional[str], provider_id: Optional[str]) -> GPT:
         """

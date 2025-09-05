@@ -167,13 +167,14 @@ const TranscriptViewer = () => {
         markdownContent += `> 转录结果 - 共 ${segments.length} 个片段\n\n`
         
         markdownContent += segments.map(segment => {
-          let content = `## ${formatTime(segment.start)}\n\n`
+          let content = ''
           
-          // 添加说话人信息（如果有）
+          // 添加说话人信息作为更大的标题（如果有）
           if (segment.speaker) {
-            content += `**说话人**: ${segment.speaker}\n\n`
+            content += `# ${segment.speaker}\n\n`
           }
           
+          content += `## ${formatTime(segment.start)}\n\n`
           content += segment.text
           
           // 为 markdown 格式添加截图，使用绝对路径
@@ -228,6 +229,10 @@ const TranscriptViewer = () => {
   const renderTimestampView = () => {
     if (!task?.transcript?.segments?.length) return null
     
+    // 检查是否有任何segment有speaker信息
+    const hasSpeaker = task.transcript.segments.some(seg => seg.speaker)
+    const gridCols = hasSpeaker ? "grid-cols-[100px_80px_1fr]" : "grid-cols-[80px_1fr]"
+    
     return (
       <div className="space-y-1">
         {task.transcript.segments.map((segment, index) => (
@@ -235,11 +240,17 @@ const TranscriptViewer = () => {
             key={index}
             ref={(el) => { segmentRefs.current[index] = el }}
             className={cn(
-              "group grid grid-cols-[80px_1fr] gap-2 rounded-md p-2 transition-colors hover:bg-slate-50",
+              `group grid ${gridCols} gap-2 rounded-md p-2 transition-colors hover:bg-slate-50`,
               activeSegment === index && "bg-slate-100",
             )}
             onClick={() => handleSegmentClick(index)}
           >
+            {hasSpeaker && (
+              <div className="flex items-center text-xs font-medium text-slate-600">
+                {segment.speaker || '-'}
+              </div>
+            )}
+            
             <div className="flex items-center gap-1 text-xs text-slate-500">
               <button
                 className="invisible rounded-full p-0.5 text-slate-400 hover:bg-slate-200 hover:text-slate-700 group-hover:visible"
@@ -254,11 +265,6 @@ const TranscriptViewer = () => {
             </div>
 
             <div className="text-sm leading-relaxed text-slate-700">
-              {segment.speaker && (
-                <span className="mr-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-700">
-                  {segment.speaker}
-                </span>
-              )}
               {segment.text}
             </div>
           </div>
@@ -296,15 +302,15 @@ const TranscriptViewer = () => {
           
           return (
             <div key={index}>
+              {segment.speaker && (
+                <h2 className="mb-3 text-lg font-bold text-slate-800">
+                  {segment.speaker}
+                </h2>
+              )}
               <h3 className="mb-2 text-sm font-semibold text-slate-600">
                 {formatTime(segment.start)}
               </h3>
               <div className="text-sm leading-relaxed text-slate-700">
-                {segment.speaker && (
-                  <span className="mr-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-700">
-                    {segment.speaker}
-                  </span>
-                )}
                 {segment.text}
               </div>
               
@@ -378,10 +384,17 @@ const TranscriptViewer = () => {
         ) : (
             <>
               {displayFormat === 'timestamp' && (
-                <div className="mb-3 grid grid-cols-[80px_1fr] gap-2 border-b pb-2 text-xs font-medium text-muted-foreground">
-                  <div>时间</div>
-                  <div>内容</div>
-                </div>
+                (() => {
+                  const hasSpeaker = task.transcript.segments.some(seg => seg.speaker)
+                  const gridCols = hasSpeaker ? "grid-cols-[100px_80px_1fr]" : "grid-cols-[80px_1fr]"
+                  return (
+                    <div className={`mb-3 grid ${gridCols} gap-2 border-b pb-2 text-xs font-medium text-muted-foreground`}>
+                      {hasSpeaker && <div>说话人</div>}
+                      <div>时间</div>
+                      <div>内容</div>
+                    </div>
+                  )
+                })()
               )}
               
               <ScrollArea className="w-full overflow-y-auto">

@@ -58,6 +58,7 @@ const formSchema = z
       .tuple([z.coerce.number().min(1).max(10), z.coerce.number().min(1).max(10)])
       .default([3, 3])
       .optional(),
+    enable_speaker_diarization: z.boolean().default(true).optional(), // 默认勾选多说话人
   })
   .superRefine(({ video_url, platform }, ctx) => {
     if (platform === 'local') {
@@ -147,6 +148,7 @@ const NoteForm = () => {
       video_interval: 4,
       grid_size: [3, 3],
       format: [],
+      enable_speaker_diarization: true, // 默认启用多说话人
     },
   })
   const currentTask = getCurrentTask()
@@ -184,6 +186,7 @@ const NoteForm = () => {
       video_interval: formData.video_interval ?? 4,
       grid_size: formData.grid_size ?? [3, 3],
       format: formData.format ?? [],
+      enable_speaker_diarization: formData.enable_speaker_diarization ?? true,
     })
   }, [
     // 当下面任意一个变了，就重新 reset
@@ -218,7 +221,7 @@ const NoteForm = () => {
 
   const onSubmit = async (values: NoteFormValues) => {
     console.log('Not even go here')
-    const payload: NoteFormValues = {
+    const payload = {
       ...values,
       provider_id: modelList.find(m => m.model_name === values.model_name)!.provider_id,
       task_id: currentTaskId || '',
@@ -229,8 +232,20 @@ const NoteForm = () => {
     }
 
     // message.success('已提交任务')
-    const  data  = await generateNote(payload)
-    addPendingTask(data.task_id, values.platform, payload)
+    try {
+      const response = await generateNote(payload as any)
+      console.log('🔍 DEBUG: response type:', typeof response)
+      console.log('🔍 DEBUG: response:', response)
+      if (response) {
+        const taskId = (response as any).task_id || response
+        console.log('🔍 DEBUG: extracted taskId:', taskId)
+        if (taskId) {
+          addPendingTask(taskId, values.platform, payload)
+        }
+      }
+    } catch (error) {
+      console.error('Form submission error:', error)
+    }
   }
   const onInvalid = (errors: FieldErrors<NoteFormValues>) => {
     console.warn('表单校验失败：', errors)
@@ -446,6 +461,27 @@ const NoteForm = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          {/* 转写配置 */}
+          <SectionHeader title="转写配置" tip="调整音频转写相关设置" />
+          <div className="flex flex-col gap-2">
+            <FormField
+              control={form.control}
+              name="enable_speaker_diarization"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center gap-2">
+                    <FormLabel>多说话人</FormLabel>
+                    <Checkbox
+                      checked={field.value ?? true}
+                      onCheckedChange={field.onChange}
+                    />
+                    <span className="text-sm text-gray-600">区分不同说话人的语音</span>
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
