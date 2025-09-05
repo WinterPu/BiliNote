@@ -13,3 +13,12 @@
 ```
 get_transcriber 根据类型选择对应的transcriber
 ```
+
+
+
+## Speaker Diarization
+### Pyannote
+注意Hugging Face 的Access Token 要把之前授权的两个Repo
+1. Accept [`pyannote/segmentation-3.0`](https://hf.co/pyannote/segmentation-3.0) user conditions
+2. Accept [`pyannote/speaker-diarization-3.1`](https://hf.co/pyannote/speaker-diarization-3.1) user conditions
+这两个Repo 给予Permissions
