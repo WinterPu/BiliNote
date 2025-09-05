@@ -34,6 +34,29 @@ interface Task {
 
 type DisplayFormat = 'timestamp' | 'text' | 'markdown'
 
+// 为不同的speaker分配颜色的函数
+const getSpeakerColor = (speaker: string): { bg: string, text: string, border: string } => {
+  const colors = [
+    { bg: 'bg-blue-50', text: 'text-blue-700', border: 'border-blue-200' },
+    { bg: 'bg-green-50', text: 'text-green-700', border: 'border-green-200' },
+    { bg: 'bg-purple-50', text: 'text-purple-700', border: 'border-purple-200' },
+    { bg: 'bg-orange-50', text: 'text-orange-700', border: 'border-orange-200' },
+    { bg: 'bg-pink-50', text: 'text-pink-700', border: 'border-pink-200' },
+    { bg: 'bg-indigo-50', text: 'text-indigo-700', border: 'border-indigo-200' },
+    { bg: 'bg-cyan-50', text: 'text-cyan-700', border: 'border-cyan-200' },
+    { bg: 'bg-yellow-50', text: 'text-yellow-700', border: 'border-yellow-200' },
+  ]
+  
+  // 使用speaker名称的hashCode来确定颜色索引，确保同一个speaker总是用相同的颜色
+  const hashCode = speaker.split('').reduce((a, b) => {
+    a = ((a << 5) - a) + b.charCodeAt(0)
+    return a & a
+  }, 0)
+  
+  const colorIndex = Math.abs(hashCode) % colors.length
+  return colors[colorIndex]
+}
+
 const TranscriptViewer = () => {
   const getCurrentTask = useTaskStore((state) => state.getCurrentTask)
   const currentTaskId = useTaskStore((state) => state.currentTaskId)
@@ -246,8 +269,19 @@ const TranscriptViewer = () => {
             onClick={() => handleSegmentClick(index)}
           >
             {hasSpeaker && (
-              <div className="flex items-center text-xs font-medium text-slate-600">
-                {segment.speaker || '-'}
+              <div className="flex items-center text-xs font-medium">
+                {segment.speaker ? (
+                  <span className={cn(
+                    "rounded px-2 py-1 border",
+                    getSpeakerColor(segment.speaker).bg,
+                    getSpeakerColor(segment.speaker).text,
+                    getSpeakerColor(segment.speaker).border
+                  )}>
+                    {segment.speaker}
+                  </span>
+                ) : (
+                  <span className="text-slate-400">-</span>
+                )}
               </div>
             )}
             
@@ -281,7 +315,12 @@ const TranscriptViewer = () => {
         {task.transcript.segments.map((segment, index) => (
           <div key={index} className="text-sm leading-relaxed text-slate-700">
             {segment.speaker && (
-              <span className="mr-2 rounded bg-slate-200 px-1.5 py-0.5 text-xs font-medium text-slate-700">
+              <span className={cn(
+                "mr-2 rounded px-1.5 py-0.5 text-xs font-medium border",
+                getSpeakerColor(segment.speaker).bg,
+                getSpeakerColor(segment.speaker).text,
+                getSpeakerColor(segment.speaker).border
+              )}>
                 {segment.speaker}
               </span>
             )}
@@ -303,7 +342,12 @@ const TranscriptViewer = () => {
           return (
             <div key={index}>
               {segment.speaker && (
-                <h2 className="mb-3 text-lg font-bold text-slate-800">
+                <h2 className={cn(
+                  "mb-3 text-lg font-bold rounded-lg px-3 py-2 border-l-4",
+                  getSpeakerColor(segment.speaker).bg,
+                  getSpeakerColor(segment.speaker).text,
+                  getSpeakerColor(segment.speaker).border.replace('border-', 'border-l-')
+                )}>
                   {segment.speaker}
                 </h2>
               )}
