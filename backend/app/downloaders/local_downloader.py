@@ -97,6 +97,14 @@ class LocalDownloader(Downloader, ABC):
         if not os.path.exists(video_url):
             raise FileNotFoundError()
         return video_url
+    def is_audio_file(self, file_path: str) -> bool:
+        """
+        检查文件是否为音频格式
+        """
+        audio_extensions = {'.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac', '.wma', '.opus'}
+        _, ext = os.path.splitext(file_path.lower())
+        return ext in audio_extensions
+
     def download(
             self,
             video_url: str,
@@ -117,21 +125,33 @@ class LocalDownloader(Downloader, ABC):
 
         file_name = os.path.basename(video_url)
         title, _ = os.path.splitext(file_name)
-        print(title, file_name,video_url)
-        file_path=self.convert_to_mp3(video_url)
-        cover_path = self.extract_cover(video_url)
-        cover_url = save_cover_to_static(cover_path)
+        print(title, file_name, video_url)
+        
+        # 检查文件类型
+        is_audio = self.is_audio_file(video_url)
+        
+        if is_audio:
+            # 如果是音频文件，直接使用原文件
+            file_path = video_url
+            cover_url = None  # 音频文件没有封面
+            print('检测到音频文件，跳过转换步骤')
+        else:
+            # 如果是视频文件，需要转换为音频并提取封面
+            file_path = self.convert_to_mp3(video_url)
+            cover_path = self.extract_cover(video_url)
+            cover_url = save_cover_to_static(cover_path)
+            print('检测到视频文件，转换为音频')
 
-        print('file——path',file_path)
+        print('file_path:', file_path)
         return AudioDownloadResult(
             file_path=file_path,
             title=title,
             duration=0,  # 可选：后续加上读取时长
-            cover_url=cover_url,  # 暂无封面
+            cover_url=cover_url,  # 音频文件无封面，视频文件有封面
             platform="local",
             video_id=title,
             raw_info={
-                'path':  file_path
+                'path': file_path
             },
             video_path=None
         )

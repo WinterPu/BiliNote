@@ -61,9 +61,10 @@ const formSchema = z
     enable_speaker_diarization: z.boolean().default(true).optional(), // 默认勾选多说话人
   })
   .superRefine(({ video_url, platform }, ctx) => {
-    if (platform === 'local') {
+    if (platform === 'local' || platform === 'local-audio') {
       if (!video_url) {
-        ctx.addIssue({ code: 'custom', message: '本地视频路径不能为空', path: ['video_url'] })
+        const fileType = platform === 'local-audio' ? '音频' : '视频'
+        ctx.addIssue({ code: 'custom', message: `本地${fileType}路径不能为空`, path: ['video_url'] })
       }
     }
     else {
@@ -203,6 +204,12 @@ const NoteForm = () => {
   const isGenerating = () => !['SUCCESS', 'FAILED', undefined].includes(getCurrentTask()?.status)
   const generating = isGenerating()
   
+  const isAudioFile = (file: File) => {
+    const audioExtensions = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'wma', 'opus']
+    const fileExtension = file.name.split('.').pop()?.toLowerCase()
+    return audioExtensions.includes(fileExtension || '')
+  }
+  
   const handleLocalFileUpload = async (file: File) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -214,8 +221,10 @@ const NoteForm = () => {
       // 处理后端响应，后端返回格式: { success: true, data: { url: "/uploads/filename" } }
       const filePath = response.data?.data?.url || `/uploads/${file.name}`
       setSelectedLocalFile(filePath)
-      // 自动设置平台为本地视频，并填入路径
-      form.setValue('platform', 'local')
+      
+      // 根据文件类型设置不同的平台
+      const platform = isAudioFile(file) ? 'local-audio' : 'local'
+      form.setValue('platform', platform)
       form.setValue('video_url', filePath)
     } catch (err) {
       console.error('上传失败:', err)
@@ -248,6 +257,8 @@ const NoteForm = () => {
     console.log('Not even go here')
     const payload = {
       ...values,
+      // 如果是 local-audio，转换为 local 供后端使用
+      platform: values.platform === 'local-audio' ? 'local' : values.platform,
       provider_id: modelList.find(m => m.model_name === values.model_name)!.provider_id,
       task_id: currentTaskId || '',
     }
@@ -353,7 +364,7 @@ const NoteForm = () => {
             </div>
             {selectedLocalFile && (
               <p className="text-xs text-green-600">
-                ✓ 文件已上传，已自动设置为本地视频模式
+                ✓ 文件已上传，已自动设置为{form.watch('platform') === 'local-audio' ? '本地音频' : '本地视频'}模式
               </p>
             )}
           </div>
