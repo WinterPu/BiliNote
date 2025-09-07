@@ -23,6 +23,8 @@ import { noteStyles } from '@/constant/note.ts'
 import { MarkdownHeader } from '@/pages/HomePage/components/MarkdownHeader.tsx'
 import TranscriptViewer from '@/pages/HomePage/components/transcriptViewer.tsx'
 import MarkmapEditor from '@/pages/HomePage/components/MarkmapComponent.tsx'
+import { processMarkdownScreenshots } from '@/utils/screenshotUtils'
+import { ResizablePanel, ResizablePanelGroup, ResizableHandle } from '@/components/ui/resizable'
 
 interface VersionNote {
   ver_id: string
@@ -61,6 +63,68 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
   const [showTranscribe, setShowTranscribe] = useState(false)
   const [viewMode, setViewMode] = useState<'map' | 'preview'>('preview')
   const svgRef = useRef<SVGSVGElement>(null)
+
+  // Helper function to render hashtags with special styling for recommend style
+  const renderParagraphWithTags = (children: React.ReactNode, props: any) => {
+    if (style !== 'recommend') {
+      return (
+        <p className="leading-7 [&:not(:first-child)]:mt-6" {...props}>
+          {children}
+        </p>
+      )
+    }
+
+    // Convert children to string to check for hashtags
+    const textContent = Array.isArray(children) ? children.join('') : String(children)
+    
+    // Check if this paragraph contains hashtags
+    const hashtagRegex = /#[\u4e00-\u9fa5a-zA-Z0-9_\-]+/g
+    const hasHashtags = hashtagRegex.test(textContent)
+
+    if (!hasHashtags) {
+      return (
+        <p className="leading-7 [&:not(:first-child)]:mt-6" {...props}>
+          {children}
+        </p>
+      )
+    }
+
+    // Split the text and render hashtags with special styling
+    const parts: (string | React.ReactElement)[] = []
+    let lastIndex = 0
+    let match
+
+    hashtagRegex.lastIndex = 0 // Reset regex
+    while ((match = hashtagRegex.exec(textContent)) !== null) {
+      // Add text before hashtag
+      if (match.index > lastIndex) {
+        parts.push(textContent.slice(lastIndex, match.index))
+      }
+      
+      // Add styled hashtag
+      parts.push(
+        <span
+          key={match.index}
+          className="inline-flex items-center px-2.5 py-0.5 mx-1 text-sm font-medium bg-blue-100 text-blue-800 rounded-full border border-blue-200 hover:bg-blue-200 transition-colors"
+        >
+          {match[0]}
+        </span>
+      )
+      
+      lastIndex = match.index + match[0].length
+    }
+
+    // Add remaining text
+    if (lastIndex < textContent.length) {
+      parts.push(textContent.slice(lastIndex))
+    }
+
+    return (
+      <p className="leading-7 [&:not(:first-child)]:mt-6" {...props}>
+        {parts}
+      </p>
+    )
+  }
   // 多版本内容处理
   useEffect(() => {
     if (!currentTask) return
@@ -132,7 +196,11 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
   const handleDownload = () => {
     const task = getCurrentTask()
     const name = task?.audioMeta.title || 'note'
-    const blob = new Blob([selectedContent], { type: 'text/markdown;charset=utf-8' })
+    
+    // 使用公共函数处理截图路径
+    const processedContent = processMarkdownScreenshots(selectedContent)
+    
+    const blob = new Blob([processedContent], { type: 'text/markdown;charset=utf-8' })
     const link = document.createElement('a')
     link.href = URL.createObjectURL(blob)
     link.download = `${name}.md`
@@ -195,6 +263,7 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
         onCopy={handleCopy}
         onDownload={handleDownload}
         createAt={createTime}
+        duration={currentTask?.duration}  // 添加生成耗时
         showTranscribe={showTranscribe}
         setShowTranscribe={setShowTranscribe}
         viewMode={viewMode}
@@ -205,7 +274,7 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
         <div className="flex w-full flex-1 overflow-hidden bg-white">
           <div className={'w-full'}>
             <MarkmapEditor
-              value={selectedContent}
+              value={processMarkdownScreenshots(selectedContent)}
               onChange={() => {}}
               height="100%" // 根据需求可以设定百分比或固定高度
             />
@@ -215,260 +284,554 @@ const MarkdownViewer: FC<MarkdownViewerProps> = ({ status }) => {
         <div className="flex flex-1 overflow-hidden bg-white py-2">
           {selectedContent && selectedContent !== 'loading' && selectedContent !== 'empty' ? (
             <>
-              <ScrollArea className="w-full">
-                <div className={'markdown-body w-full px-2'}>
-                  <ReactMarkdown
-                    remarkPlugins={[gfm, remarkMath]}
-                    rehypePlugins={[rehypeKatex]}
-                    components={{
-                      // Headings with improved styling and anchor links
-                      h1: ({ children, ...props }) => (
-                        <h1
-                          className="text-primary my-6 scroll-m-20 text-3xl font-extrabold tracking-tight lg:text-4xl"
-                          {...props}
-                        >
-                          {children}
-                        </h1>
-                      ),
-                      h2: ({ children, ...props }) => (
-                        <h2
-                          className="text-primary mt-10 mb-4 scroll-m-20 border-b pb-2 text-2xl font-semibold tracking-tight first:mt-0"
-                          {...props}
-                        >
-                          {children}
-                        </h2>
-                      ),
-                      h3: ({ children, ...props }) => (
-                        <h3
-                          className="text-primary mt-8 mb-4 scroll-m-20 text-xl font-semibold tracking-tight"
-                          {...props}
-                        >
-                          {children}
-                        </h3>
-                      ),
-                      h4: ({ children, ...props }) => (
-                        <h4
-                          className="text-primary mt-6 mb-2 scroll-m-20 text-lg font-semibold tracking-tight"
-                          {...props}
-                        >
-                          {children}
-                        </h4>
-                      ),
-
-                      // Paragraphs with better line height
-                      p: ({ children, ...props }) => (
-                        <p className="leading-7 [&:not(:first-child)]:mt-6" {...props}>
-                          {children}
-                        </p>
-                      ),
-
-                      // Enhanced links with special handling for "原片" links
-                      a: ({ href, children, ...props }) => {
-                        const isOriginLink =
-                          typeof children[0] === 'string' &&
-                          (children[0] as string).startsWith('原片 @')
-
-                        if (isOriginLink) {
-                          const timeMatch = (children[0] as string).match(/原片 @ (\d{2}:\d{2})/)
-                          const timeText = timeMatch ? timeMatch[1] : '原片'
-
-                          return (
-                            <span className="origin-link my-2 inline-flex">
-                              <a
-                                href={href}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
+              {showTranscribe ? (
+                <ResizablePanelGroup direction="horizontal" className="h-full w-full">
+                  <ResizablePanel defaultSize={60} minSize={30} maxSize={80}>
+                    <ScrollArea className="h-full w-full">
+                      <div className={'markdown-body w-full px-2'}>
+                        <ReactMarkdown
+                          remarkPlugins={[gfm, remarkMath]}
+                          rehypePlugins={[rehypeKatex]}
+                          components={{
+                            // Headings with improved styling and anchor links
+                            h1: ({ children, ...props }) => (
+                              <h1
+                                className="text-primary my-6 scroll-m-20 text-3xl font-extrabold tracking-tight lg:text-4xl"
                                 {...props}
                               >
-                                <Play className="h-3.5 w-3.5" />
-                                <span>原片（{timeText}）</span>
-                              </a>
-                            </span>
-                          )
-                        }
+                                {children}
+                              </h1>
+                            ),
+                            h2: ({ children, ...props }) => (
+                              <h2
+                                className="text-primary mt-10 mb-4 scroll-m-20 border-b pb-2 text-2xl font-semibold tracking-tight first:mt-0"
+                                {...props}
+                              >
+                                {children}
+                              </h2>
+                            ),
+                            h3: ({ children, ...props }) => (
+                              <h3
+                                className="text-primary mt-8 mb-4 scroll-m-20 text-xl font-semibold tracking-tight"
+                                {...props}
+                              >
+                                {children}
+                              </h3>
+                            ),
+                            h4: ({ children, ...props }) => (
+                              <h4
+                                className="text-primary mt-6 mb-2 scroll-m-20 text-lg font-semibold tracking-tight"
+                                {...props}
+                              >
+                                {children}
+                              </h4>
+                            ),
 
-                        // Default link styling with external indicator
-                        return (
-                          <a
-                            href={href}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-primary hover:text-primary/80 inline-flex items-center gap-0.5 font-medium underline underline-offset-4"
+                            // Paragraphs with better line height and hashtag styling for recommend style
+                            p: ({ children, ...props }) => renderParagraphWithTags(children, props),
+
+                            // Enhanced links with special handling for "原片" links
+                            a: ({ href, children, ...props }) => {
+                              const isOriginLink =
+                                typeof children[0] === 'string' &&
+                                (children[0] as string).startsWith('原片 @')
+
+                              if (isOriginLink) {
+                                const timeMatch = (children[0] as string).match(/原片 @ (\d{2}:\d{2})/)
+                                const timeText = timeMatch ? timeMatch[1] : '原片'
+
+                                return (
+                                  <span className="origin-link my-2 inline-flex">
+                                    <a
+                                      href={href}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
+                                      {...props}
+                                    >
+                                      <Play className="h-3.5 w-3.5" />
+                                      <span>原片（{timeText}）</span>
+                                    </a>
+                                  </span>
+                                )
+                              }
+
+                              // Default link styling with external indicator
+                              return (
+                                <a
+                                  href={href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-primary hover:text-primary/80 inline-flex items-center gap-0.5 font-medium underline underline-offset-4"
+                                  {...props}
+                                >
+                                  {children}
+                                  {href?.startsWith('http') && (
+                                    <ExternalLink className="ml-0.5 inline-block h-3 w-3" />
+                                  )}
+                                </a>
+                              )
+                            },
+
+                            // Enhanced image with zoom capability
+                            img: ({ node, ...props }: any) => {
+                              // 处理图片路径
+                              let src = props.src
+                              const originalSrc = src
+                              
+                              // 如果是相对路径（以 /static/ 开头），直接使用（Vite已配置代理）
+                              // 如果是完整URL（以 http 开头），直接使用
+                              // 其他情况，添加baseURL前缀
+                              if (src?.startsWith('/static/')) {
+                                // 直接使用，Vite代理会处理
+                                console.log('Image path (static):', originalSrc, '→', src)
+                              } else if (src?.startsWith('http')) {
+                                // 完整URL，直接使用
+                                console.log('Image path (http):', originalSrc, '→', src)
+                              } else {
+                                // 其他情况，添加baseURL前缀
+                                src = baseURL + src
+                                console.log('Image path (baseURL):', originalSrc, '→', src)
+                              }
+
+                              return (
+                                <div className="my-8 flex justify-center">
+                                  <Zoom>
+                                    <img
+                                      {...props}
+                                      src={src}
+                                      className="max-w-full cursor-zoom-in rounded-lg object-cover shadow-md transition-all hover:shadow-lg"
+                                      style={{ maxHeight: '500px' }}
+                                      onError={(e) => {
+                                        console.error('Image failed to load:', src)
+                                        console.error('Image error event:', e)
+                                      }}
+                                      onLoad={() => {
+                                        console.log('Image loaded successfully:', src)
+                                      }}
+                                    />
+                                  </Zoom>
+                                </div>
+                              )
+                            },
+
+                            // Better strong/bold text
+                            strong: ({ children, ...props }) => (
+                              <strong className="text-primary font-bold" {...props}>
+                                {children}
+                              </strong>
+                            ),
+
+                            // Enhanced list items with support for "fake headings"
+                            li: ({ children, ...props }) => {
+                              const rawText = String(children)
+                              const isFakeHeading = /^(\*\*.+\*\*)$/.test(rawText.trim())
+
+                              if (isFakeHeading) {
+                                return (
+                                  <div className="text-primary my-4 text-lg font-bold">{children}</div>
+                                )
+                              }
+
+                              return (
+                                <li className="my-1" {...props}>
+                                  {children}
+                                </li>
+                              )
+                            },
+
+                            // Enhanced unordered lists
+                            ul: ({ children, ...props }) => (
+                              <ul className="my-6 ml-6 list-disc [&>li]:mt-2" {...props}>
+                                {children}
+                              </ul>
+                            ),
+
+                            // Enhanced ordered lists
+                            ol: ({ children, ...props }) => (
+                              <ol className="my-6 ml-6 list-decimal [&>li]:mt-2" {...props}>
+                                {children}
+                              </ol>
+                            ),
+
+                            // Enhanced blockquotes
+                            blockquote: ({ children, ...props }) => (
+                              <blockquote
+                                className="border-primary/20 text-muted-foreground mt-6 border-l-4 pl-4 italic"
+                                {...props}
+                              >
+                                {children}
+                              </blockquote>
+                            ),
+
+                            // Enhanced code blocks with syntax highlighting and copy button
+                            code: ({ inline, className, children, ...props }) => {
+                              const match = /language-(\w+)/.exec(className || '')
+                              const codeContent = String(children).replace(/\n$/, '')
+
+                              if (!inline && match) {
+                                return (
+                                  <div className="group bg-muted relative my-6 overflow-hidden rounded-lg border shadow-sm">
+                                    <div className="bg-muted text-muted-foreground flex items-center justify-between px-4 py-1.5 text-sm font-medium">
+                                      <div>{match[1].toUpperCase()}</div>
+                                      <button
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(codeContent)
+                                          toast.success('代码已复制')
+                                        }}
+                                        className="bg-background/80 hover:bg-background flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors"
+                                      >
+                                        <Copy className="h-3.5 w-3.5" />
+                                        复制
+                                      </button>
+                                    </div>
+                                    <SyntaxHighlighter
+                                      style={codeStyle}
+                                      language={match[1]}
+                                      PreTag="div"
+                                      className="!bg-muted !m-0 !p-0"
+                                      customStyle={{
+                                        margin: 0,
+                                        padding: '1rem',
+                                        background: 'transparent',
+                                        fontSize: '0.9rem',
+                                      }}
+                                      {...props}
+                                    >
+                                      {codeContent}
+                                    </SyntaxHighlighter>
+                                  </div>
+                                )
+                              }
+
+                              // Inline code styling
+                              return (
+                                <code
+                                  className="bg-muted relative rounded px-[0.3rem] py-[0.2rem] font-mono text-sm"
+                                  {...props}
+                                >
+                                  {children}
+                                </code>
+                              )
+                            },
+
+                            // Enhanced tables
+                            table: ({ children, ...props }) => (
+                              <div className="my-6 w-full overflow-y-auto">
+                                <table className="w-full border-collapse text-sm" {...props}>
+                                  {children}
+                                </table>
+                              </div>
+                            ),
+
+                            // Table headers
+                            th: ({ children, ...props }) => (
+                              <th
+                                className="border-muted-foreground/20 border px-4 py-2 text-left font-medium [&[align=center]]:text-center [&[align=right]]:text-right"
+                                {...props}
+                              >
+                                {children}
+                              </th>
+                            ),
+
+                            // Table cells
+                            td: ({ children, ...props }) => (
+                              <td
+                                className="border-muted-foreground/20 border px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right"
+                                {...props}
+                              >
+                                {children}
+                              </td>
+                            ),
+
+                            // Horizontal rule
+                            hr: ({ ...props }) => (
+                              <hr className="border-muted-foreground/20 my-8" {...props} />
+                            ),
+                          }}
+                        >
+                          {selectedContent}
+                        </ReactMarkdown>
+                      </div>
+                    </ScrollArea>
+                  </ResizablePanel>
+                  
+                  <ResizableHandle />
+                  
+                  <ResizablePanel defaultSize={40} minSize={20} maxSize={70}>
+                    <div className="h-full pl-2">
+                      <TranscriptViewer />
+                    </div>
+                  </ResizablePanel>
+                </ResizablePanelGroup>
+              ) : (
+                <ScrollArea className="w-full">
+                  <div className={'markdown-body w-full px-2'}>
+                    <ReactMarkdown
+                      remarkPlugins={[gfm, remarkMath]}
+                      rehypePlugins={[rehypeKatex]}
+                      components={{
+                        // Headings with improved styling and anchor links
+                        h1: ({ children, ...props }) => (
+                          <h1
+                            className="text-primary my-6 scroll-m-20 text-3xl font-extrabold tracking-tight lg:text-4xl"
                             {...props}
                           >
                             {children}
-                            {href?.startsWith('http') && (
-                              <ExternalLink className="ml-0.5 inline-block h-3 w-3" />
-                            )}
-                          </a>
-                        )
-                      },
-
-                      // Enhanced image with zoom capability
-                      img: ({ node, ...props }) =>{
-
-                        let src = baseURL +props.src
-                        props.src = src
-
-
-                     return(
-
-
-                      <div className="my-8 flex justify-center">
-                          <Zoom>
-                            <img
-                              {...props}
-                              className="max-w-full cursor-zoom-in rounded-lg object-cover shadow-md transition-all hover:shadow-lg"
-                              style={{ maxHeight: '500px' }}
-                            />
-                          </Zoom>
-                        </div>
-                      )},
-
-                      // Better strong/bold text
-                      strong: ({ children, ...props }) => (
-                        <strong className="text-primary font-bold" {...props}>
-                          {children}
-                        </strong>
-                      ),
-
-                      // Enhanced list items with support for "fake headings"
-                      li: ({ children, ...props }) => {
-                        const rawText = String(children)
-                        const isFakeHeading = /^(\*\*.+\*\*)$/.test(rawText.trim())
-
-                        if (isFakeHeading) {
-                          return (
-                            <div className="text-primary my-4 text-lg font-bold">{children}</div>
-                          )
-                        }
-
-                        return (
-                          <li className="my-1" {...props}>
+                          </h1>
+                        ),
+                        h2: ({ children, ...props }) => (
+                          <h2
+                            className="text-primary mt-10 mb-4 scroll-m-20 border-b pb-2 text-2xl font-semibold tracking-tight first:mt-0"
+                            {...props}
+                          >
                             {children}
-                          </li>
-                        )
-                      },
+                          </h2>
+                        ),
+                        h3: ({ children, ...props }) => (
+                          <h3
+                            className="text-primary mt-8 mb-4 scroll-m-20 text-xl font-semibold tracking-tight"
+                            {...props}
+                          >
+                            {children}
+                          </h3>
+                        ),
+                        h4: ({ children, ...props }) => (
+                          <h4
+                            className="text-primary mt-6 mb-2 scroll-m-20 text-lg font-semibold tracking-tight"
+                            {...props}
+                          >
+                            {children}
+                          </h4>
+                        ),
 
-                      // Enhanced unordered lists
-                      ul: ({ children, ...props }) => (
-                        <ul className="my-6 ml-6 list-disc [&>li]:mt-2" {...props}>
-                          {children}
-                        </ul>
-                      ),
+                        // Paragraphs with better line height
+                        p: ({ children, ...props }) => renderParagraphWithTags(children, props),
 
-                      // Enhanced ordered lists
-                      ol: ({ children, ...props }) => (
-                        <ol className="my-6 ml-6 list-decimal [&>li]:mt-2" {...props}>
-                          {children}
-                        </ol>
-                      ),
+                        // Enhanced links with special handling for "原片" links
+                        a: ({ href, children, ...props }: any) => {
+                          const isOriginLink =
+                            typeof children[0] === 'string' &&
+                            (children[0] as string).startsWith('原片 @')
 
-                      // Enhanced blockquotes
-                      blockquote: ({ children, ...props }) => (
-                        <blockquote
-                          className="border-primary/20 text-muted-foreground mt-6 border-l-4 pl-4 italic"
-                          {...props}
-                        >
-                          {children}
-                        </blockquote>
-                      ),
+                          if (isOriginLink) {
+                            const timeMatch = (children[0] as string).match(/原片 @ (\d{2}:\d{2})/)
+                            const timeText = timeMatch ? timeMatch[1] : '原片'
 
-                      // Enhanced code blocks with syntax highlighting and copy button
-                      code: ({ inline, className, children, ...props }) => {
-                        const match = /language-(\w+)/.exec(className || '')
-                        const codeContent = String(children).replace(/\n$/, '')
-
-                        if (!inline && match) {
-                          return (
-                            <div className="group bg-muted relative my-6 overflow-hidden rounded-lg border shadow-sm">
-                              <div className="bg-muted text-muted-foreground flex items-center justify-between px-4 py-1.5 text-sm font-medium">
-                                <div>{match[1].toUpperCase()}</div>
-                                <button
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(codeContent)
-                                    toast.success('代码已复制')
-                                  }}
-                                  className="bg-background/80 hover:bg-background flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors"
+                            return (
+                              <span className="origin-link my-2 inline-flex">
+                                <a
+                                  href={href}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 rounded-full bg-blue-50 px-3 py-1 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100"
+                                  {...props}
                                 >
-                                  <Copy className="h-3.5 w-3.5" />
-                                  复制
-                                </button>
-                              </div>
-                              <SyntaxHighlighter
-                                style={codeStyle}
-                                language={match[1]}
-                                PreTag="div"
-                                className="!bg-muted !m-0 !p-0"
-                                customStyle={{
-                                  margin: 0,
-                                  padding: '1rem',
-                                  background: 'transparent',
-                                  fontSize: '0.9rem',
-                                }}
-                                {...props}
-                              >
-                                {codeContent}
-                              </SyntaxHighlighter>
+                                  <Play className="h-3.5 w-3.5" />
+                                  <span>原片（{timeText}）</span>
+                                </a>
+                              </span>
+                            )
+                          }
+
+                          // Default link styling with external indicator
+                          return (
+                            <a
+                              href={href}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-primary hover:text-primary/80 inline-flex items-center gap-0.5 font-medium underline underline-offset-4"
+                              {...props}
+                            >
+                              {children}
+                              {href?.startsWith('http') && (
+                                <ExternalLink className="ml-0.5 inline-block h-3 w-3" />
+                              )}
+                            </a>
+                          )
+                        },
+
+                        // Enhanced image with zoom capability
+                        img: ({ node, ...props }: any) => {
+                          // 处理图片路径
+                          let src = props.src
+                          const originalSrc = src
+                          
+                          // 如果是相对路径（以 /static/ 开头），直接使用（Vite已配置代理）
+                          // 如果是完整URL（以 http 开头），直接使用
+                          // 其他情况，添加baseURL前缀
+                          if (src?.startsWith('/static/')) {
+                            // 直接使用，Vite代理会处理
+                            console.log('Image path (static):', originalSrc, '→', src)
+                          } else if (src?.startsWith('http')) {
+                            // 完整URL，直接使用
+                            console.log('Image path (http):', originalSrc, '→', src)
+                          } else {
+                            // 其他情况，添加baseURL前缀
+                            src = baseURL + src
+                            console.log('Image path (baseURL):', originalSrc, '→', src)
+                          }
+
+                          return (
+                            <div className="my-8 flex justify-center">
+                              <Zoom>
+                                <img
+                                  {...props}
+                                  src={src}
+                                  className="max-w-full cursor-zoom-in rounded-lg object-cover shadow-md transition-all hover:shadow-lg"
+                                  style={{ maxHeight: '500px' }}
+                                  onError={(e) => {
+                                    console.error('Image failed to load:', src)
+                                    console.error('Image error event:', e)
+                                  }}
+                                  onLoad={() => {
+                                    console.log('Image loaded successfully:', src)
+                                  }}
+                                />
+                              </Zoom>
                             </div>
                           )
-                        }
+                        },
 
-                        // Inline code styling
-                        return (
-                          <code
-                            className="bg-muted relative rounded px-[0.3rem] py-[0.2rem] font-mono text-sm"
+                        // Better strong/bold text
+                        strong: ({ children, ...props }) => (
+                          <strong className="text-primary font-bold" {...props}>
+                            {children}
+                          </strong>
+                        ),
+
+                        // Enhanced list items with support for "fake headings"
+                        li: ({ children, ...props }) => {
+                          const rawText = String(children)
+                          const isFakeHeading = /^(\*\*.+\*\*)$/.test(rawText.trim())
+
+                          if (isFakeHeading) {
+                            return (
+                              <div className="text-primary my-4 text-lg font-bold">{children}</div>
+                            )
+                          }
+
+                          return (
+                            <li className="my-1" {...props}>
+                              {children}
+                            </li>
+                          )
+                        },
+
+                        // Enhanced unordered lists
+                        ul: ({ children, ...props }) => (
+                          <ul className="my-6 ml-6 list-disc [&>li]:mt-2" {...props}>
+                            {children}
+                          </ul>
+                        ),
+
+                        // Enhanced ordered lists
+                        ol: ({ children, ...props }) => (
+                          <ol className="my-6 ml-6 list-decimal [&>li]:mt-2" {...props}>
+                            {children}
+                          </ol>
+                        ),
+
+                        // Enhanced blockquotes
+                        blockquote: ({ children, ...props }) => (
+                          <blockquote
+                            className="border-primary/20 text-muted-foreground mt-6 border-l-4 pl-4 italic"
                             {...props}
                           >
                             {children}
-                          </code>
-                        )
-                      },
+                          </blockquote>
+                        ),
 
-                      // Enhanced tables
-                      table: ({ children, ...props }) => (
-                        <div className="my-6 w-full overflow-y-auto">
-                          <table className="w-full border-collapse text-sm" {...props}>
+                        // Enhanced code blocks with syntax highlighting and copy button
+                        code: ({ inline, className, children, ...props }) => {
+                          const match = /language-(\w+)/.exec(className || '')
+                          const codeContent = String(children).replace(/\n$/, '')
+
+                          if (!inline && match) {
+                            return (
+                              <div className="group bg-muted relative my-6 overflow-hidden rounded-lg border shadow-sm">
+                                <div className="bg-muted text-muted-foreground flex items-center justify-between px-4 py-1.5 text-sm font-medium">
+                                  <div>{match[1].toUpperCase()}</div>
+                                  <button
+                                    onClick={() => {
+                                      navigator.clipboard.writeText(codeContent)
+                                      toast.success('代码已复制')
+                                    }}
+                                    className="bg-background/80 hover:bg-background flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors"
+                                  >
+                                    <Copy className="h-3.5 w-3.5" />
+                                    复制
+                                  </button>
+                                </div>
+                                <SyntaxHighlighter
+                                  style={codeStyle}
+                                  language={match[1]}
+                                  PreTag="div"
+                                  className="!bg-muted !m-0 !p-0"
+                                  customStyle={{
+                                    margin: 0,
+                                    padding: '1rem',
+                                    background: 'transparent',
+                                    fontSize: '0.9rem',
+                                  }}
+                                  {...props}
+                                >
+                                  {codeContent}
+                                </SyntaxHighlighter>
+                              </div>
+                            )
+                          }
+
+                          // Inline code styling
+                          return (
+                            <code
+                              className="bg-muted relative rounded px-[0.3rem] py-[0.2rem] font-mono text-sm"
+                              {...props}
+                            >
+                              {children}
+                            </code>
+                          )
+                        },
+
+                        // Enhanced tables
+                        table: ({ children, ...props }) => (
+                          <div className="my-6 w-full overflow-y-auto">
+                            <table className="w-full border-collapse text-sm" {...props}>
+                              {children}
+                            </table>
+                          </div>
+                        ),
+
+                        // Table headers
+                        th: ({ children, ...props }) => (
+                          <th
+                            className="border-muted-foreground/20 border px-4 py-2 text-left font-medium [&[align=center]]:text-center [&[align=right]]:text-right"
+                            {...props}
+                          >
                             {children}
-                          </table>
-                        </div>
-                      ),
+                          </th>
+                        ),
 
-                      // Table headers
-                      th: ({ children, ...props }) => (
-                        <th
-                          className="border-muted-foreground/20 border px-4 py-2 text-left font-medium [&[align=center]]:text-center [&[align=right]]:text-right"
-                          {...props}
-                        >
-                          {children}
-                        </th>
-                      ),
+                        // Table cells
+                        td: ({ children, ...props }) => (
+                          <td
+                            className="border-muted-foreground/20 border px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right"
+                            {...props}
+                          >
+                            {children}
+                          </td>
+                        ),
 
-                      // Table cells
-                      td: ({ children, ...props }) => (
-                        <td
-                          className="border-muted-foreground/20 border px-4 py-2 text-left [&[align=center]]:text-center [&[align=right]]:text-right"
-                          {...props}
-                        >
-                          {children}
-                        </td>
-                      ),
-
-                      // Horizontal rule
-                      hr: ({ ...props }) => (
-                        <hr className="border-muted-foreground/20 my-8" {...props} />
-                      ),
-                    }}
-                  >
-                    {selectedContent}
-                  </ReactMarkdown>
-                </div>
-              </ScrollArea>
-              {showTranscribe && (
-                <div className={'ml-2 w-2/4'}>
-                  <TranscriptViewer />
-                </div>
+                        // Horizontal rule
+                        hr: ({ ...props }) => (
+                          <hr className="border-muted-foreground/20 my-8" {...props} />
+                        ),
+                      }}
+                    >
+                      {selectedContent}
+                    </ReactMarkdown>
+                  </div>
+                </ScrollArea>
               )}
             </>
           ) : (

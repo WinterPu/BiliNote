@@ -7,6 +7,7 @@ class TranscriptSegment:
     start: float               # 开始时间（秒）
     end: float                 # 结束时间（秒）
     text: str                  # 该段文字
+    speaker: Optional[str] = None  # 说话人标识（如 "speaker0", "speaker1"）
 
 @dataclass
 class TranscriptResult:

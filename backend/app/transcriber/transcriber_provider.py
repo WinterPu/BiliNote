@@ -30,15 +30,9 @@ if platform.system() == "Darwin" and os.environ.get("TRANSCRIBER_TYPE") == "mlx-
 
 logger.info('初始化转录服务提供器')
 
-# 转录器单例缓存
-_transcribers = {
-    TranscriberType.FAST_WHISPER: None,
-    TranscriberType.MLX_WHISPER: None,
-    TranscriberType.OPENAI_WHISPER: None,
-    TranscriberType.BCUT: None,
-    TranscriberType.KUAISHOU: None,
-    TranscriberType.GROQ: None,
-}
+# 转录器单例缓存 - 根据参数组合缓存
+_transcriber_cache = {}
+
 # OpenAI Whisper Transcriber
 try:
     from app.transcriber.openai_whisper import OpenAIWhisperTranscriber
@@ -48,18 +42,22 @@ except ImportError:
     OPENAI_WHISPER_AVAILABLE = False
     logger.warning("OpenAI Whisper 导入失败，可能未安装 openai-whisper")
 
-
 # 公共实例初始化函数
 def _init_transcriber(key: TranscriberType, cls, *args, **kwargs):
-    if _transcribers[key] is None:
-        logger.info(f'创建 {cls.__name__} 实例: {key}')
+    # 创建基于参数的缓存键
+    cache_key = (key, frozenset(kwargs.items()))
+    
+    if cache_key not in _transcriber_cache:
+        logger.info(f'创建 {cls.__name__} 实例: {key}, 参数: {kwargs}')
         try:
-            _transcribers[key] = cls(*args, **kwargs)
+            _transcriber_cache[cache_key] = cls(*args, **kwargs)
             logger.info(f'{cls.__name__} 创建成功')
         except Exception as e:
             logger.error(f"{cls.__name__} 创建失败: {e}")
             raise
-    return _transcribers[key]
+    else:
+        logger.info(f'复用已缓存的 {cls.__name__} 实例: {key}, 参数: {kwargs}')
+    return _transcriber_cache[cache_key]
 
 # 各类型获取方法
 # 各类型获取方法
@@ -81,14 +79,16 @@ def get_mlx_whisper_transcriber(model_size="base"):
         raise ImportError("MLX Whisper 不可用")
     return _init_transcriber(TranscriberType.MLX_WHISPER, MLXWhisperTranscriber, model_size=model_size)
 
-def get_openai_whisper_transcriber(model_size="base", device="cuda"):
+def get_openai_whisper_transcriber(model_size="base", device="cuda", enable_speaker_diarization=False):
     if not OPENAI_WHISPER_AVAILABLE:
         logger.warning("OpenAI Whisper 不可用，请确保已安装 openai-whisper")
         raise ImportError("OpenAI Whisper 不可用")
-    return _init_transcriber(TranscriberType.OPENAI_WHISPER, OpenAIWhisperTranscriber, model_size=model_size, device=device)
+    return _init_transcriber(TranscriberType.OPENAI_WHISPER, OpenAIWhisperTranscriber, 
+                           model_size=model_size, device=device, 
+                           enable_speaker_diarization=enable_speaker_diarization)
 
 # 通用入口
-def get_transcriber(transcriber_type="fast-whisper", model_size="base", device="cuda"):
+def get_transcriber(transcriber_type="fast-whisper", model_size="base", device="cuda", enable_speaker_diarization=None):
     """
     获取指定类型的转录器实例
 
@@ -96,11 +96,21 @@ def get_transcriber(transcriber_type="fast-whisper", model_size="base", device="
         transcriber_type: 支持 "fast-whisper", "mlx-whisper", "bcut", "kuaishou", "groq"
         model_size: 模型大小，适用于 whisper 类
         device: 设备类型（如 cuda / cpu），仅 whisper 使用
+        enable_speaker_diarization: 是否启用说话人分离（None表示从环境变量读取）
 
     返回:
         对应类型的转录器实例
     """
     logger.info(f'请求转录器类型: {transcriber_type}')
+    
+    # 只有当 enable_speaker_diarization 为 None 时，才从环境变量读取默认值
+    # 如果前端传入了明确的 True 或 False，则必须尊重用户的选择
+    if enable_speaker_diarization is None:
+        speaker_method = os.getenv("SPEAKER_DIARIZATION_METHOD", "").strip()
+        enable_speaker_diarization = bool(speaker_method)
+        logger.info(f'从环境变量设置 enable_speaker_diarization: {enable_speaker_diarization}')
+    else:
+        logger.info(f'使用前端传入的 enable_speaker_diarization: {enable_speaker_diarization}')
 
     try:
         transcriber_enum = TranscriberType(transcriber_type)
@@ -123,7 +133,8 @@ def get_transcriber(transcriber_type="fast-whisper", model_size="base", device="
         if not OPENAI_WHISPER_AVAILABLE:
             logger.warning("OpenAI Whisper 不可用，回退到 fast-whisper")
             return get_whisper_transcriber(whisper_model_size, device=device)
-        return get_openai_whisper_transcriber(whisper_model_size, device=device)
+        return get_openai_whisper_transcriber(whisper_model_size, device=device, 
+                                            enable_speaker_diarization=enable_speaker_diarization)
 
     elif transcriber_enum == TranscriberType.BCUT:
         return get_bcut_transcriber()

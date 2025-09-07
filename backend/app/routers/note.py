@@ -49,6 +49,7 @@ class VideoRequest(BaseModel):
     video_understanding: Optional[bool] = False
     video_interval: Optional[int] = 0
     grid_size: Optional[list] = []
+    enable_speaker_diarization: Optional[bool] = False
 
     @field_validator("video_url")
     def validate_supported_url(cls, v):
@@ -76,33 +77,64 @@ def save_note_to_file(task_id: str, note):
 def run_note_task(task_id: str, video_url: str, platform: str, quality: DownloadQuality,
                   link: bool = False, screenshot: bool = False, model_name: str = None, provider_id: str = None,
                   _format: list = None, style: str = None, extras: str = None, video_understanding: bool = False,
-                  video_interval=0, grid_size=[]
+                  video_interval=0, grid_size=[], enable_speaker_diarization: bool = False
                   ):
-
     if not model_name or not provider_id:
         raise HTTPException(status_code=400, detail="请选择模型和提供者")
 
-    note = NoteGenerator().generate(
-        video_url=video_url,
-        platform=platform,
-        quality=quality,
-        task_id=task_id,
-        model_name=model_name,
-        provider_id=provider_id,
-        link=link,
-        _format=_format,
-        style=style,
-        extras=extras,
-        screenshot=screenshot
-        , video_understanding=video_understanding,
-        video_interval=video_interval,
-        grid_size=grid_size
-    )
-    logger.info(f"Note generated: {task_id}")
-    if not note or not note.markdown:
-        logger.warning(f"任务 {task_id} 执行失败，跳过保存")
-        return
-    save_note_to_file(task_id, note)
+    # 立即设置任务为运行状态
+    from app.enmus.task_status_enums import TaskStatus
+    status_path = os.path.join(NOTE_OUTPUT_DIR, f"{task_id}.status.json")
+    os.makedirs(NOTE_OUTPUT_DIR, exist_ok=True)
+    
+    try:
+        # 设置初始运行状态
+        with open(status_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "status": TaskStatus.RUNNING.value,
+                "message": "任务开始执行"
+            }, f, ensure_ascii=False)
+        
+        note = NoteGenerator(enable_speaker_diarization=enable_speaker_diarization).generate(
+            video_url=video_url,
+            platform=platform,
+            quality=quality,
+            task_id=task_id,
+            model_name=model_name,
+            provider_id=provider_id,
+            link=link,
+            _format=_format,
+            style=style,
+            extras=extras,
+            screenshot=screenshot
+            , video_understanding=video_understanding,
+            video_interval=video_interval,
+            grid_size=grid_size
+        )
+        logger.info(f"Note generated: {task_id}")
+        if not note or not note.markdown:
+            logger.warning(f"任务 {task_id} 执行失败，跳过保存")
+            # 设置失败状态
+            with open(status_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "status": TaskStatus.FAILED.value,
+                    "message": "笔记生成失败"
+                }, f, ensure_ascii=False)
+            return
+        save_note_to_file(task_id, note)
+        
+    except Exception as e:
+        logger.error(f"任务 {task_id} 执行异常: {str(e)}")
+        # 设置失败状态
+        try:
+            with open(status_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "status": TaskStatus.FAILED.value,
+                    "message": f"任务执行失败: {str(e)}"
+                }, f, ensure_ascii=False)
+        except Exception as status_error:
+            logger.error(f"无法写入失败状态: {status_error}")
+        raise
 
 
 
@@ -144,8 +176,14 @@ def generate_note(data: VideoRequest, background_tasks: BackgroundTasks):
         if data.task_id:
             # 如果传了task_id，说明是重试！
             task_id = data.task_id
-            # 更新之前的状态
-            NoteGenerator()._update_status(task_id, TaskStatus.PENDING)
+            # 更新之前的状态 - 直接写状态文件而不是使用 NoteGenerator 实例
+            status_path = os.path.join(NOTE_OUTPUT_DIR, f"{task_id}.status.json")
+            os.makedirs(NOTE_OUTPUT_DIR, exist_ok=True)
+            with open(status_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "status": TaskStatus.PENDING.value,
+                    "message": "任务重新排队"
+                }, f, ensure_ascii=False)
             logger.info(f"重试模式，复用已有 task_id={task_id}")
         else:
             # 正常新建任务
@@ -153,7 +191,8 @@ def generate_note(data: VideoRequest, background_tasks: BackgroundTasks):
 
         background_tasks.add_task(run_note_task, task_id, data.video_url, data.platform, data.quality, data.link,
                                   data.screenshot, data.model_name, data.provider_id, data.format, data.style,
-                                  data.extras, data.video_understanding, data.video_interval, data.grid_size)
+                                  data.extras, data.video_understanding, data.video_interval, data.grid_size,
+                                  data.enable_speaker_diarization)
         return R.success({"task_id": task_id})
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

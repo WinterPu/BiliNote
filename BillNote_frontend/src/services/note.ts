@@ -1,35 +1,23 @@
 import request from '@/utils/request'
 import toast from 'react-hot-toast'
 
-export const generateNote = async (data: {
-  video_url: string
-  platform: string
-  quality: string
-  model_name: string
-  provider_id: string
-  task_id?: string
-  format: Array<string>
-  style: string
-  extras?: string
-  video_understand?: boolean
-  video_interval?: number
-  grid_size: Array<number>
-}) => {
+export const generateNote = async (data: any): Promise<any> => {
   try {
-    console.log('generateNote', data)
+    console.log('🚀 generateNote called with:', data)
     const response = await request.post('/generate_note', data)
+    console.log('✅ API response received:', response)
+    console.log('✅ Response type:', typeof response)
+    console.log('✅ Response keys:', Object.keys(response || {}))
 
     if (!response) {
-      if (response.data.msg) {
+      if (response.data && response.data.msg) {
         toast.error(response.data.msg)
       }
       return null
     }
     toast.success('笔记生成任务已提交！')
 
-    console.log('res', response)
-    // 成功提示
-
+    console.log('📋 Final return value:', response)
     return response
   } catch (e: any) {
     console.error('❌ 请求出错', e)

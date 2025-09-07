@@ -12,7 +12,7 @@ import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 
-import { Info, Loader2, Plus } from 'lucide-react'
+import { Info, Loader2, Plus, Upload } from 'lucide-react'
 import { message, Alert } from 'antd'
 import { generateNote } from '@/services/note.ts'
 import { uploadFile } from '@/services/upload.ts'
@@ -58,11 +58,13 @@ const formSchema = z
       .tuple([z.coerce.number().min(1).max(10), z.coerce.number().min(1).max(10)])
       .default([3, 3])
       .optional(),
+    enable_speaker_diarization: z.boolean().default(false).optional(), // 默认不勾选多说话人
   })
   .superRefine(({ video_url, platform }, ctx) => {
-    if (platform === 'local') {
+    if (platform === 'local' || platform === 'local-audio') {
       if (!video_url) {
-        ctx.addIssue({ code: 'custom', message: '本地视频路径不能为空', path: ['video_url'] })
+        const fileType = platform === 'local-audio' ? '音频' : '视频'
+        ctx.addIssue({ code: 'custom', message: `本地${fileType}路径不能为空`, path: ['video_url'] })
       }
     }
     else {
@@ -131,6 +133,8 @@ const NoteForm = () => {
   const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false)
   const [uploadSuccess, setUploadSuccess] = useState(false)
+  const [selectedLocalFile, setSelectedLocalFile] = useState<string>('')
+  const [isLocalFileUploading, setIsLocalFileUploading] = useState(false)
   /* ---- 全局状态 ---- */
   const { addPendingTask, currentTaskId, setCurrentTask, getCurrentTask, retryTask } =
     useTaskStore()
@@ -147,6 +151,7 @@ const NoteForm = () => {
       video_interval: 4,
       grid_size: [3, 3],
       format: [],
+      enable_speaker_diarization: false, // 默认不启用多说话人
     },
   })
   const currentTask = getCurrentTask()
@@ -184,6 +189,7 @@ const NoteForm = () => {
       video_interval: formData.video_interval ?? 4,
       grid_size: formData.grid_size ?? [3, 3],
       format: formData.format ?? [],
+      enable_speaker_diarization: formData.enable_speaker_diarization ?? false,
     })
   }, [
     // 当下面任意一个变了，就重新 reset
@@ -197,6 +203,37 @@ const NoteForm = () => {
   /* ---- 帮助函数 ---- */
   const isGenerating = () => !['SUCCESS', 'FAILED', undefined].includes(getCurrentTask()?.status)
   const generating = isGenerating()
+  
+  const isAudioFile = (file: File) => {
+    const audioExtensions = ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'flac', 'wma', 'opus']
+    const fileExtension = file.name.split('.').pop()?.toLowerCase()
+    return audioExtensions.includes(fileExtension || '')
+  }
+  
+  const handleLocalFileUpload = async (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    setIsLocalFileUploading(true)
+    setSelectedLocalFile('')
+
+    try {
+      const response = await uploadFile(formData)
+      // 处理后端响应，后端返回格式: { success: true, data: { url: "/uploads/filename" } }
+      const filePath = response.data?.data?.url || `/uploads/${file.name}`
+      setSelectedLocalFile(filePath)
+      
+      // 根据文件类型设置不同的平台
+      const platform = isAudioFile(file) ? 'local-audio' : 'local'
+      form.setValue('platform', platform)
+      form.setValue('video_url', filePath)
+    } catch (err) {
+      console.error('上传失败:', err)
+      // message.error('上传失败，请重试')
+    } finally {
+      setIsLocalFileUploading(false)
+    }
+  }
+
   const handleFileUpload = async (file: File, cb: (url: string) => void) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -204,10 +241,10 @@ const NoteForm = () => {
     setUploadSuccess(false)
 
     try {
-  
-      const  data  = await uploadFile(formData)
-        cb(data.url)
-        setUploadSuccess(true)
+      const response = await uploadFile(formData)
+      const filePath = response.data?.data?.url || `/uploads/${file.name}`
+      cb(filePath)
+      setUploadSuccess(true)
     } catch (err) {
       console.error('上传失败:', err)
       // message.error('上传失败，请重试')
@@ -217,20 +254,36 @@ const NoteForm = () => {
   }
 
   const onSubmit = async (values: NoteFormValues) => {
-    console.log('Not even go here')
-    const payload: NoteFormValues = {
+    console.log('🔍 DEBUG: 提交的表单值:', values)
+    console.log('🔍 DEBUG: enable_speaker_diarization:', values.enable_speaker_diarization)
+    const payload = {
       ...values,
+      // 如果是 local-audio，转换为 local 供后端使用
+      platform: values.platform === 'local-audio' ? 'local' : values.platform,
       provider_id: modelList.find(m => m.model_name === values.model_name)!.provider_id,
       task_id: currentTaskId || '',
     }
+    console.log('🔍 DEBUG: 最终提交的payload:', payload)
     if (currentTaskId) {
       retryTask(currentTaskId, payload)
       return
     }
 
     // message.success('已提交任务')
-    const  data  = await generateNote(payload)
-    addPendingTask(data.task_id, values.platform, payload)
+    try {
+      const response = await generateNote(payload as any)
+      console.log('🔍 DEBUG: response type:', typeof response)
+      console.log('🔍 DEBUG: response:', response)
+      if (response) {
+        const taskId = (response as any).task_id || response
+        console.log('🔍 DEBUG: extracted taskId:', taskId)
+        if (taskId) {
+          addPendingTask(taskId, values.platform, payload)
+        }
+      }
+    } catch (error) {
+      console.error('Form submission error:', error)
+    }
   }
   const onInvalid = (errors: FieldErrors<NoteFormValues>) => {
     console.warn('表单校验失败：', errors)
@@ -272,6 +325,51 @@ const NoteForm = () => {
         <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-4">
           {/* 顶部按钮 */}
           <FormButton></FormButton>
+
+          {/* 本地文件上传区域 */}
+          <div className="space-y-2">
+            <SectionHeader title="本地文件上传" tip="上传本地视频或音频文件进行解析" />
+            <div className="flex gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => {
+                  const input = document.createElement('input')
+                  input.type = 'file'
+                  input.accept = 'video/*,audio/*'
+                  input.onchange = (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0]
+                    if (file) handleLocalFileUpload(file)
+                  }
+                  input.click()
+                }}
+                disabled={isLocalFileUploading || generating}
+              >
+                {isLocalFileUploading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    上传中...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="mr-2 h-4 w-4" />
+                    选择文件
+                  </>
+                )}
+              </Button>
+              <Input 
+                placeholder="选中的文件路径会显示在这里" 
+                value={selectedLocalFile}
+                readOnly
+                className="flex-1"
+              />
+            </div>
+            {selectedLocalFile && (
+              <p className="text-xs text-green-600">
+                ✓ 文件已上传，已自动设置为{form.watch('platform') === 'local-audio' ? '本地音频' : '本地视频'}模式
+              </p>
+            )}
+          </div>
 
           {/* 视频链接 & 平台 */}
           <SectionHeader title="视频链接" tip="支持 B 站、YouTube 等平台" />
@@ -446,6 +544,27 @@ const NoteForm = () => {
                       ))}
                     </SelectContent>
                   </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+          {/* 转写配置 */}
+          <SectionHeader title="转写配置" tip="调整音频转写相关设置" />
+          <div className="flex flex-col gap-2">
+            <FormField
+              control={form.control}
+              name="enable_speaker_diarization"
+              render={({ field }) => (
+                <FormItem>
+                  <div className="flex items-center gap-2">
+                    <FormLabel>多说话人</FormLabel>
+                    <Checkbox
+                      checked={field.value ?? true}
+                      onCheckedChange={field.onChange}
+                    />
+                    <span className="text-sm text-gray-600">区分不同说话人的语音</span>
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
