@@ -31,7 +31,7 @@ from app.models.transcriber_model import TranscriptResult, TranscriptSegment
 from app.services.constant import SUPPORT_PLATFORM_MAP
 from app.services.provider import ProviderService
 from app.transcriber.base import Transcriber
-from app.transcriber.transcriber_provider import get_transcriber, _transcribers
+from app.transcriber.transcriber_provider import get_transcriber, TranscriberType
 from app.utils.note_helper import replace_content_markers
 from app.utils.status_code import StatusCode
 from app.utils.video_helper import generate_screenshot
@@ -216,7 +216,10 @@ class NoteGenerator:
         """
         根据环境变量 TRANSCRIBER_TYPE 动态获取并实例化转写器
         """
-        if self.transcriber_type not in _transcribers:
+        # 验证转写器类型是否支持
+        try:
+            TranscriberType(self.transcriber_type)
+        except ValueError:
             logger.error(f"未找到支持的转写器：{self.transcriber_type}")
             raise Exception(f"不支持的转写器：{self.transcriber_type}")
 

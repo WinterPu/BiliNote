@@ -79,7 +79,6 @@ def run_note_task(task_id: str, video_url: str, platform: str, quality: Download
                   _format: list = None, style: str = None, extras: str = None, video_understanding: bool = False,
                   video_interval=0, grid_size=[], enable_speaker_diarization: bool = False
                   ):
-
     if not model_name or not provider_id:
         raise HTTPException(status_code=400, detail="请选择模型和提供者")
 

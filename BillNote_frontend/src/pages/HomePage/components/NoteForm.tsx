@@ -58,7 +58,7 @@ const formSchema = z
       .tuple([z.coerce.number().min(1).max(10), z.coerce.number().min(1).max(10)])
       .default([3, 3])
       .optional(),
-    enable_speaker_diarization: z.boolean().default(true).optional(), // 默认勾选多说话人
+    enable_speaker_diarization: z.boolean().default(false).optional(), // 默认不勾选多说话人
   })
   .superRefine(({ video_url, platform }, ctx) => {
     if (platform === 'local' || platform === 'local-audio') {
@@ -151,7 +151,7 @@ const NoteForm = () => {
       video_interval: 4,
       grid_size: [3, 3],
       format: [],
-      enable_speaker_diarization: true, // 默认启用多说话人
+      enable_speaker_diarization: false, // 默认不启用多说话人
     },
   })
   const currentTask = getCurrentTask()
@@ -189,7 +189,7 @@ const NoteForm = () => {
       video_interval: formData.video_interval ?? 4,
       grid_size: formData.grid_size ?? [3, 3],
       format: formData.format ?? [],
-      enable_speaker_diarization: formData.enable_speaker_diarization ?? true,
+      enable_speaker_diarization: formData.enable_speaker_diarization ?? false,
     })
   }, [
     // 当下面任意一个变了，就重新 reset
@@ -254,7 +254,8 @@ const NoteForm = () => {
   }
 
   const onSubmit = async (values: NoteFormValues) => {
-    console.log('Not even go here')
+    console.log('🔍 DEBUG: 提交的表单值:', values)
+    console.log('🔍 DEBUG: enable_speaker_diarization:', values.enable_speaker_diarization)
     const payload = {
       ...values,
       // 如果是 local-audio，转换为 local 供后端使用
@@ -262,6 +263,7 @@ const NoteForm = () => {
       provider_id: modelList.find(m => m.model_name === values.model_name)!.provider_id,
       task_id: currentTaskId || '',
     }
+    console.log('🔍 DEBUG: 最终提交的payload:', payload)
     if (currentTaskId) {
       retryTask(currentTaskId, payload)
       return
