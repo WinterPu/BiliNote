@@ -12,7 +12,7 @@ import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 
-import { Info, Loader2, Plus } from 'lucide-react'
+import { Info, Loader2, Plus, Upload } from 'lucide-react'
 import { message, Alert } from 'antd'
 import { generateNote } from '@/services/note.ts'
 import { uploadFile } from '@/services/upload.ts'
@@ -132,6 +132,8 @@ const NoteForm = () => {
   const navigate = useNavigate();
   const [isUploading, setIsUploading] = useState(false)
   const [uploadSuccess, setUploadSuccess] = useState(false)
+  const [selectedLocalFile, setSelectedLocalFile] = useState<string>('')
+  const [isLocalFileUploading, setIsLocalFileUploading] = useState(false)
   /* ---- 全局状态 ---- */
   const { addPendingTask, currentTaskId, setCurrentTask, getCurrentTask, retryTask } =
     useTaskStore()
@@ -200,6 +202,29 @@ const NoteForm = () => {
   /* ---- 帮助函数 ---- */
   const isGenerating = () => !['SUCCESS', 'FAILED', undefined].includes(getCurrentTask()?.status)
   const generating = isGenerating()
+  
+  const handleLocalFileUpload = async (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    setIsLocalFileUploading(true)
+    setSelectedLocalFile('')
+
+    try {
+      const response = await uploadFile(formData)
+      // 处理后端响应，后端返回格式: { success: true, data: { url: "/uploads/filename" } }
+      const filePath = response.data?.data?.url || `/uploads/${file.name}`
+      setSelectedLocalFile(filePath)
+      // 自动设置平台为本地视频，并填入路径
+      form.setValue('platform', 'local')
+      form.setValue('video_url', filePath)
+    } catch (err) {
+      console.error('上传失败:', err)
+      // message.error('上传失败，请重试')
+    } finally {
+      setIsLocalFileUploading(false)
+    }
+  }
+
   const handleFileUpload = async (file: File, cb: (url: string) => void) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -207,10 +232,10 @@ const NoteForm = () => {
     setUploadSuccess(false)
 
     try {
-  
-      const  data  = await uploadFile(formData)
-        cb(data.url)
-        setUploadSuccess(true)
+      const response = await uploadFile(formData)
+      const filePath = response.data?.data?.url || `/uploads/${file.name}`
+      cb(filePath)
+      setUploadSuccess(true)
     } catch (err) {
       console.error('上传失败:', err)
       // message.error('上传失败，请重试')
@@ -287,6 +312,51 @@ const NoteForm = () => {
         <form onSubmit={form.handleSubmit(onSubmit, onInvalid)} className="space-y-4">
           {/* 顶部按钮 */}
           <FormButton></FormButton>
+
+          {/* 本地文件上传区域 */}
+          <div className="space-y-2">
+            <SectionHeader title="本地文件上传" tip="上传本地视频或音频文件进行解析" />
+            <div className="flex gap-2">
+              <Button 
+                type="button" 
+                variant="outline" 
+                onClick={() => {
+                  const input = document.createElement('input')
+                  input.type = 'file'
+                  input.accept = 'video/*,audio/*'
+                  input.onchange = (e) => {
+                    const file = (e.target as HTMLInputElement).files?.[0]
+                    if (file) handleLocalFileUpload(file)
+                  }
+                  input.click()
+                }}
+                disabled={isLocalFileUploading || generating}
+              >
+                {isLocalFileUploading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    上传中...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="mr-2 h-4 w-4" />
+                    选择文件
+                  </>
+                )}
+              </Button>
+              <Input 
+                placeholder="选中的文件路径会显示在这里" 
+                value={selectedLocalFile}
+                readOnly
+                className="flex-1"
+              />
+            </div>
+            {selectedLocalFile && (
+              <p className="text-xs text-green-600">
+                ✓ 文件已上传，已自动设置为本地视频模式
+              </p>
+            )}
+          </div>
 
           {/* 视频链接 & 平台 */}
           <SectionHeader title="视频链接" tip="支持 B 站、YouTube 等平台" />
