@@ -417,6 +417,10 @@ const NoteForm = () => {
                     <>
                       <Input disabled={!!editing} placeholder="请输入本地视频路径" {...field} />
                     </>
+                  ) : platform === 'local-audio' ? (
+                    <>
+                      <Input disabled={!!editing} placeholder="请输入本地音频路径" {...field} />
+                    </>
                   ) : (
                     <Input disabled={!!editing} placeholder="请输入视频网站链接" {...field} />
                   )}
@@ -431,7 +435,7 @@ const NoteForm = () => {
             name="video_url"
             render={({ field }) => (
               <FormItem className="flex-1">
-                {platform === 'local' && (
+                {(platform === 'local' || platform === 'local-audio') && (
                   <>
                     <div
                       className="hover:border-primary mt-2 flex h-40 cursor-pointer items-center justify-center rounded-md border-2 border-dashed border-gray-300 transition-colors"
@@ -447,7 +451,7 @@ const NoteForm = () => {
                       onClick={() => {
                         const input = document.createElement('input')
                         input.type = 'file'
-                        input.accept = 'video/*'
+                        input.accept = platform === 'local-audio' ? 'audio/*' : 'video/*'
                         input.onchange = e => {
                           const file = (e.target as HTMLInputElement).files?.[0]
                           if (file) handleFileUpload(file, field.onChange)
@@ -461,7 +465,7 @@ const NoteForm = () => {
                         <p className="text-center text-sm text-green-500">上传成功！</p>
                       ) : (
                         <p className="text-center text-sm text-gray-500">
-                          拖拽文件到这里上传 <br />
+                          拖拽{platform === 'local-audio' ? '音频' : '视频'}文件到这里上传 <br />
                           <span className="text-xs text-gray-400">或点击选择文件</span>
                         </p>
                       )}
@@ -582,6 +586,7 @@ const NoteForm = () => {
                     <FormLabel>启用</FormLabel>
                     <Checkbox
                       checked={videoUnderstandingEnabled}
+                      disabled={platform === 'local-audio'}
                       onCheckedChange={v => form.setValue('video_understanding', v)}
                     />
                   </div>
@@ -656,8 +661,8 @@ const NoteForm = () => {
                   value={field.value}
                   onChange={field.onChange}
                   disabledMap={{
-                    link: platform === 'local',
-                    screenshot: !videoUnderstandingEnabled,
+                    link: platform === 'local' || platform === 'local-audio',
+                    screenshot: !videoUnderstandingEnabled || platform === 'local-audio',
                   }}
                 />
                 <FormMessage />

@@ -357,8 +357,76 @@ class NoteGenerator:
 
 
 
+        # 已有缓存，尝试加载
+        if audio_cache_file.exists():
+            logger.info(f"检测到音频缓存 ({audio_cache_file})，直接读取")
+            try:
+                data = json.loads(audio_cache_file.read_text(encoding="utf-8"))
+                audio_result = AudioDownloadResult(**data)
+                
+                # 验证缓存的音频文件是否仍然存在且有效
+                if audio_result.file_path and os.path.exists(audio_result.file_path):
+                    file_size = os.path.getsize(audio_result.file_path)
+                    if file_size > 0:
+                        logger.info(f"音频缓存有效，文件大小: {file_size} bytes")
+                        return audio_result
+                    else:
+                        logger.warning(f"缓存的音频文件为空，将重新下载: {audio_result.file_path}")
+                else:
+                    logger.warning(f"缓存的音频文件不存在，将重新下载: {audio_result.file_path}")
+            except Exception as e:
+                logger.warning(f"读取音频缓存失败，将重新下载：{e}")
+
         # 判断是否需要下载视频
         need_video = screenshot or video_understanding
+        
+        # 先下载音频获取文件信息
+        try:
+            logger.info("开始下载音频")
+            audio = downloader.download(
+                video_url=video_url,
+                quality=quality,
+                output_dir=output_path,
+                need_video=False,  # 先不下载视频，只获取音频信息
+            )
+            
+            # 验证下载的音频文件
+            if not audio or not audio.file_path:
+                raise Exception("音频下载失败：未返回有效的音频文件路径")
+            
+            if not os.path.exists(audio.file_path):
+                raise Exception(f"音频下载失败：文件不存在 {audio.file_path}")
+            
+            file_size = os.path.getsize(audio.file_path)
+            if file_size == 0:
+                raise Exception(f"音频下载失败：文件为空 {audio.file_path}")
+            
+            if file_size < 1024:  # 小于1KB可能是无效音频
+                logger.warning(f"音频文件过小，可能无效 ({file_size} bytes): {audio.file_path}")
+            
+            logger.info(f"音频下载成功，文件大小: {file_size} bytes")
+            
+            # 检查是否为音频文件
+            is_audio_file = False
+            if hasattr(downloader, 'is_audio_file'):
+                is_audio_file = downloader.is_audio_file(audio.file_path)
+            else:
+                # 通过文件扩展名判断
+                audio_extensions = {'.mp3', '.wav', '.m4a', '.aac', '.ogg', '.flac', '.wma', '.opus'}
+                _, ext = os.path.splitext(audio.file_path.lower())
+                is_audio_file = ext in audio_extensions
+            
+            # 如果是音频文件且需要视频处理，跳过视频处理并给出提示
+            if is_audio_file and need_video:
+                logger.info("检测到音频文件，跳过视频理解功能（截图/视频理解对音频文件无效）")
+                need_video = False
+            
+        except Exception as exc:
+            logger.error(f"音频下载失败：{exc}")
+            self._handle_exception(task_id, exc)
+            raise
+        
+        # 如果需要视频处理且不是纯音频文件，则进行视频处理
         if need_video:
             try:
                 logger.info("开始下载视频")
@@ -380,62 +448,13 @@ class NoteGenerator:
                     logger.info("未指定 grid_size，跳过缩略图生成")
             except Exception as exc:
                 logger.error(f"视频下载失败：{exc}")
-
                 self._handle_exception(task_id, exc)
                 raise
-        # 已有缓存，尝试加载
-        if audio_cache_file.exists():
-            logger.info(f"检测到音频缓存 ({audio_cache_file})，直接读取")
-            try:
-                data = json.loads(audio_cache_file.read_text(encoding="utf-8"))
-                audio_result = AudioDownloadResult(**data)
                 
-                # 验证缓存的音频文件是否仍然存在且有效
-                if audio_result.file_path and os.path.exists(audio_result.file_path):
-                    file_size = os.path.getsize(audio_result.file_path)
-                    if file_size > 0:
-                        logger.info(f"音频缓存有效，文件大小: {file_size} bytes")
-                        return audio_result
-                    else:
-                        logger.warning(f"缓存的音频文件为空，将重新下载: {audio_result.file_path}")
-                else:
-                    logger.warning(f"缓存的音频文件不存在，将重新下载: {audio_result.file_path}")
-            except Exception as e:
-                logger.warning(f"读取音频缓存失败，将重新下载：{e}")
-        # 下载音频
-        try:
-            logger.info("开始下载音频")
-            audio = downloader.download(
-                video_url=video_url,
-                quality=quality,
-                output_dir=output_path,
-                need_video=need_video,
-            )
-            
-            # 验证下载的音频文件
-            if not audio or not audio.file_path:
-                raise Exception("音频下载失败：未返回有效的音频文件路径")
-            
-            if not os.path.exists(audio.file_path):
-                raise Exception(f"音频下载失败：文件不存在 {audio.file_path}")
-            
-            file_size = os.path.getsize(audio.file_path)
-            if file_size == 0:
-                raise Exception(f"音频下载失败：文件为空 {audio.file_path}")
-            
-            if file_size < 1024:  # 小于1KB可能是无效音频
-                logger.warning(f"音频文件过小，可能无效 ({file_size} bytes): {audio.file_path}")
-            
-            logger.info(f"音频下载成功，文件大小: {file_size} bytes")
-            
-            # 缓存 audio 元信息到本地 JSON
-            audio_cache_file.write_text(json.dumps(asdict(audio), ensure_ascii=False, indent=2), encoding="utf-8")
-            logger.info(f"音频下载并缓存成功 ({audio_cache_file})")
-            return audio
-        except Exception as exc:
-            logger.error(f"音频下载失败：{exc}")
-            self._handle_exception(task_id, exc)
-            raise
+        # 缓存 audio 元信息到本地 JSON
+        audio_cache_file.write_text(json.dumps(asdict(audio), ensure_ascii=False, indent=2), encoding="utf-8")
+        logger.info(f"音频下载并缓存成功 ({audio_cache_file})")
+        return audio
 
 
     def _transcribe_audio(
